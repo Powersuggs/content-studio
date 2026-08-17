@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { ExternalLink, PenLine } from "lucide-react";
-import { getMyPostById, getMyMedianRates } from "@/lib/queries";
+import { getMyPostById, getMyMedianRates, getDistinctPillars } from "@/lib/queries";
 import PostAnalyticsPanel from "@/components/posts/PostAnalyticsPanel";
 import ReviewButton from "@/components/posts/ReviewButton";
+import PillarTag from "@/components/posts/PillarTag";
 
 const VERDICT_STYLE: Record<string, string> = {
   win: "bg-accent/15 text-accent border-accent/30",
@@ -28,6 +29,7 @@ export default async function PostDetailPage({
   }
 
   const medians = await getMyMedianRates();
+  const pillarSuggestions = await getDistinctPillars();
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
@@ -55,6 +57,9 @@ export default async function PostDetailPage({
           </div>
           <p className="mt-1 text-sm text-muted">{post.happened_on}</p>
           <p className="mt-2 text-sm text-text">{post.caption || "No caption"}</p>
+          <div className="mt-3">
+            <PillarTag postId={post.id} pillar={post.pillar} suggestions={pillarSuggestions} />
+          </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {post.url && (
               <a

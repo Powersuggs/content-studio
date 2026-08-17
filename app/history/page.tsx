@@ -28,7 +28,14 @@ export default async function HistoryPage() {
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-text">{post.caption || "No caption"}</p>
-                  <p className="text-xs text-faint">{post.happened_on}</p>
+                  <div className="mt-0.5 flex items-center gap-2">
+                    <p className="text-xs text-faint">{post.happened_on}</p>
+                    {post.pillar && (
+                      <span className="rounded-full border border-border bg-panel-2 px-1.5 py-0.5 text-[10px] text-muted">
+                        {post.pillar}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <p className="shrink-0 text-sm text-muted">{post.views.toLocaleString()} views</p>
               </Link>

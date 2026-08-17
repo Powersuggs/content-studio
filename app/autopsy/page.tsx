@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getPostsBelowMedianViews } from "@/lib/queries";
+import { getPostsBelowMedianViews, getPillarPerformance } from "@/lib/queries";
 
 function formatViews(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -7,8 +7,15 @@ function formatViews(n: number): string {
   return String(n);
 }
 
+function formatAvg(n: number): string {
+  return n >= 10 ? n.toFixed(0) : n.toFixed(1);
+}
+
 export default async function AutopsyPage() {
-  const posts = await getPostsBelowMedianViews();
+  const [posts, pillarPerformance] = await Promise.all([
+    getPostsBelowMedianViews(),
+    getPillarPerformance(),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-8">
@@ -18,6 +25,41 @@ export default async function AutopsyPage() {
           Every post below your median views, worst performer first.
         </p>
       </div>
+
+      {pillarPerformance.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold text-text">Performance by pillar</h2>
+          <div className="overflow-hidden rounded-xl border border-border bg-panel">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-faint">
+                  <th className="p-3 font-medium">Pillar</th>
+                  <th className="p-3 font-medium">Posts</th>
+                  <th className="p-3 font-medium">Avg views</th>
+                  <th className="p-3 font-medium">Avg likes</th>
+                  <th className="p-3 font-medium">Avg saves</th>
+                  <th className="p-3 font-medium">Avg shares</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pillarPerformance.map((row) => (
+                  <tr key={row.pillar} className="border-b border-border last:border-0">
+                    <td className="p-3 text-text">{row.pillar}</td>
+                    <td className="p-3 text-muted">{row.post_count}</td>
+                    <td className="p-3 text-text">{formatAvg(row.avg_views)}</td>
+                    <td className="p-3 text-muted">{formatAvg(row.avg_likes)}</td>
+                    <td className="p-3 text-muted">{formatAvg(row.avg_saves)}</td>
+                    <td className="p-3 text-muted">{formatAvg(row.avg_shares)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-faint">
+            Tag posts with a pillar from their post page to fill this in -- untagged posts group under &quot;Untagged&quot;.
+          </p>
+        </section>
+      )}
 
       {posts.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-6 text-sm text-faint">
@@ -50,7 +92,14 @@ export default async function AutopsyPage() {
                     <p className="truncate text-sm text-text">
                       {post.caption || "No caption"}
                     </p>
-                    <p className="text-xs text-faint">{post.happened_on}</p>
+                    <div className="mt-0.5 flex items-center gap-2">
+                      <p className="text-xs text-faint">{post.happened_on}</p>
+                      {post.pillar && (
+                        <span className="rounded-full border border-border bg-panel-2 px-1.5 py-0.5 text-[10px] text-muted">
+                          {post.pillar}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-semibold text-warn">

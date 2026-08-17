@@ -381,6 +381,7 @@ export interface PostDetail extends PostForAnalysis {
   review: string | null;
   verdict: string | null;
   script: string | null;
+  pillar: string | null;
 }
 
 /** A single post, but ONLY if it belongs to my handle -- reviewing someone else's imported post is not allowed. */
@@ -390,11 +391,75 @@ export async function getMyPostById(postId: number): Promise<PostDetail | null> 
   return queryOne<PostDetail>(
     `select
        id, url, thumb_url, caption, script, views, likes, comments, shares, saves, reach,
-       duration_s, avg_watch_s, review, verdict,
+       duration_s, avg_watch_s, review, verdict, pillar,
        ${postHappenedExpr(3)} as happened_on
      from posts
      where id = $1 and handle = $2`,
     [postId, handle, timezone],
+  );
+}
+
+// ---------------------------------------------------------------------
+// Content pillars: free-text categories the creator assigns to their
+// own posts, so performance can be compared by content type.
+// ---------------------------------------------------------------------
+
+/** Set (or clear, with null/empty) the pillar tag on one of my own posts. */
+export async function updatePostPillar(
+  postId: number,
+  pillar: string | null,
+): Promise<{ id: number }> {
+  const handle = await requireMyHandle();
+  const cleaned = pillar?.trim() || null;
+  const row = await queryOne<{ id: number }>(
+    `update posts
+     set pillar = $1
+     where id = $2 and handle = $3
+     returning id`,
+    [cleaned, postId, handle],
+  );
+  if (!row) throw new Error("Post not found for this handle");
+  return row;
+}
+
+/** Every distinct pillar label already used on my own posts, for autocomplete. */
+export async function getDistinctPillars(): Promise<string[]> {
+  const handle = await requireMyHandle();
+  const rows = await query<{ pillar: string }>(
+    `select distinct pillar
+     from posts
+     where handle = $1 and pillar is not null and pillar <> ''
+     order by pillar asc`,
+    [handle],
+  );
+  return rows.map((r) => r.pillar);
+}
+
+export interface PillarPerformance {
+  pillar: string;
+  post_count: number;
+  avg_views: number;
+  avg_likes: number;
+  avg_saves: number;
+  avg_shares: number;
+}
+
+/** Average performance grouped by content pillar, own handle only, best avg views first. Untagged posts group under "Untagged". */
+export async function getPillarPerformance(): Promise<PillarPerformance[]> {
+  const handle = await requireMyHandle();
+  return query<PillarPerformance>(
+    `select
+       coalesce(nullif(pillar, ''), 'Untagged') as pillar,
+       count(*)::int as post_count,
+       avg(views)  as avg_views,
+       avg(likes)  as avg_likes,
+       avg(saves)  as avg_saves,
+       avg(shares) as avg_shares
+     from posts
+     where handle = $1
+     group by coalesce(nullif(pillar, ''), 'Untagged')
+     order by avg_views desc nulls last`,
+    [handle],
   );
 }
 
@@ -475,6 +540,7 @@ export interface UnderperformingPost {
   thumb_url: string | null;
   views: number;
   median_views: number;
+  pillar: string | null;
 }
 
 export async function getPostsBelowMedianViews(): Promise<UnderperformingPost[]> {
@@ -487,7 +553,7 @@ export async function getPostsBelowMedianViews(): Promise<UnderperformingPost[]>
        where handle = $1
      )
      select
-       posts.id, posts.caption, posts.thumb_url, posts.views,
+       posts.id, posts.caption, posts.thumb_url, posts.views, posts.pillar,
        ${postHappenedExpr(2, "posts")} as happened_on,
        stats.median_views
      from posts, stats
@@ -767,11 +833,15 @@ export async function saveReferenceBreakdown(
 }
 
 // --- History: my posts, newest first --------------------------------------
-export async function getAllMyPostsHistory(limit = 500): Promise<RecentPost[]> {
+export interface HistoryPost extends RecentPost {
+  pillar: string | null;
+}
+
+export async function getAllMyPostsHistory(limit = 500): Promise<HistoryPost[]> {
   const handle = await requireMyHandle();
   const timezone = DEFAULT_APP_TIMEZONE;
-  return query<RecentPost>(
-    `select id, thumb_url, caption, url, views, ${postHappenedExpr(2)} as happened_on
+  return query<HistoryPost>(
+    `select id, thumb_url, caption, url, views, pillar, ${postHappenedExpr(2)} as happened_on
      from posts
      where handle = $1
      order by ${postHappenedExpr(2)} desc nulls last, id desc
