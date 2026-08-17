@@ -231,14 +231,14 @@ export async function getAveragesLast30Days(): Promise<AveragesRow> {
        where handle = $1
      )
      select
-       (select avg(views)  from scoped, bounds where happened >= bounds.today - 30 and happened < bounds.today)              as curr_views,
-       (select avg(views)  from scoped, bounds where happened >= bounds.today - 60 and happened < bounds.today - 30)         as prev_views,
-       (select avg(likes)  from scoped, bounds where happened >= bounds.today - 30 and happened < bounds.today)              as curr_likes,
-       (select avg(likes)  from scoped, bounds where happened >= bounds.today - 60 and happened < bounds.today - 30)         as prev_likes,
-       (select avg(saves)  from scoped, bounds where happened >= bounds.today - 30 and happened < bounds.today)              as curr_saves,
-       (select avg(saves)  from scoped, bounds where happened >= bounds.today - 60 and happened < bounds.today - 30)         as prev_saves,
-       (select avg(shares) from scoped, bounds where happened >= bounds.today - 30 and happened < bounds.today)              as curr_shares,
-       (select avg(shares) from scoped, bounds where happened >= bounds.today - 60 and happened < bounds.today - 30)         as prev_shares
+       (select avg(views)  from scoped, bounds where happened >= bounds.today - 29 and happened <= bounds.today)              as curr_views,
+       (select avg(views)  from scoped, bounds where happened >= bounds.today - 59 and happened <= bounds.today - 30)         as prev_views,
+       (select avg(likes)  from scoped, bounds where happened >= bounds.today - 29 and happened <= bounds.today)              as curr_likes,
+       (select avg(likes)  from scoped, bounds where happened >= bounds.today - 59 and happened <= bounds.today - 30)         as prev_likes,
+       (select avg(saves)  from scoped, bounds where happened >= bounds.today - 29 and happened <= bounds.today)              as curr_saves,
+       (select avg(saves)  from scoped, bounds where happened >= bounds.today - 59 and happened <= bounds.today - 30)         as prev_saves,
+       (select avg(shares) from scoped, bounds where happened >= bounds.today - 29 and happened <= bounds.today)              as curr_shares,
+       (select avg(shares) from scoped, bounds where happened >= bounds.today - 59 and happened <= bounds.today - 30)         as prev_shares
     `,
     [handle, timezone],
   );
@@ -523,9 +523,9 @@ export async function getPostingCadence(): Promise<CadenceStats> {
        where handle = $1
      )
      select
-       (select count(*) from scoped, bounds where happened >= bounds.today - 30 and happened < bounds.today)::int as posts_last_30,
-       (select count(distinct happened) from scoped, bounds where happened >= bounds.today - 30 and happened < bounds.today)::int as distinct_days_last_30,
-       (select count(*) from scoped, bounds where happened >= bounds.today - 60 and happened < bounds.today - 30)::int as posts_prior_30
+       (select count(*) from scoped, bounds where happened >= bounds.today - 29 and happened <= bounds.today)::int as posts_last_30,
+       (select count(distinct happened) from scoped, bounds where happened >= bounds.today - 29 and happened <= bounds.today)::int as distinct_days_last_30,
+       (select count(*) from scoped, bounds where happened >= bounds.today - 59 and happened <= bounds.today - 30)::int as posts_prior_30
     `,
     [handle, timezone],
   );
