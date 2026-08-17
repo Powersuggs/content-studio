@@ -1,5 +1,6 @@
 import { getReferencePostsGroupedByHandle } from "@/lib/queries";
 import AddReferenceForm from "@/components/inspiration/AddReferenceForm";
+import BulkImportForm from "@/components/inspiration/BulkImportForm";
 
 export default async function InspirationPage() {
   const grouped = await getReferencePostsGroupedByHandle();
@@ -15,6 +16,7 @@ export default async function InspirationPage() {
       </div>
 
       <AddReferenceForm />
+      <BulkImportForm />
 
       {handles.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-6 text-sm text-faint">
