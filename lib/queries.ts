@@ -678,6 +678,7 @@ export interface ReferencePost {
   url: string | null;
   views: number;
   happened_on: string;
+  breakdown: string | null;
 }
 
 /**
@@ -691,10 +692,18 @@ export async function getReferencePostsGroupedByHandle(): Promise<
   const myHandle = await getMyHandle();
   const timezone = DEFAULT_APP_TIMEZONE;
   const rows = await query<ReferencePost>(
-    `select id, handle, thumb_url, caption, url, views, ${postHappenedExpr(2)} as happened_on
-     from posts
-     where handle is distinct from $1
-     order by handle asc, ${postHappenedExpr(2)} desc nulls last`,
+    `select p.id, p.handle, p.thumb_url, p.caption, p.url, p.views,
+            ${postHappenedExpr(2, "p")} as happened_on,
+            i.content as breakdown
+     from posts p
+     left join lateral (
+       select content from insights
+       where insights.post_id = p.id and insights.kind = 'breakdown'
+       order by insights.created_at desc
+       limit 1
+     ) i on true
+     where p.handle is distinct from $1
+     order by p.handle asc, ${postHappenedExpr(2, "p")} desc nulls last`,
     [myHandle, timezone],
   );
   const grouped: Record<string, ReferencePost[]> = {};
@@ -703,6 +712,58 @@ export async function getReferencePostsGroupedByHandle(): Promise<
     (grouped[key] ??= []).push(row);
   }
   return grouped;
+}
+
+// --- Inspiration: importing a reference post from another creator ---------
+export interface CreateReferencePostInput {
+  platform: "instagram" | "tiktok" | "reference";
+  handle: string;
+  url: string | null;
+  caption: string | null;
+}
+
+/**
+ * Insert a reference post from another creator. Unlike upsertPost() (which
+ * keys off a real platform media id from a synced API), reference posts are
+ * hand-entered, so we derive a stable external_id from the URL when we have
+ * one, or a random token when we don't -- either way it satisfies the same
+ * (platform, external_id) uniqueness upsertPost relies on, so re-submitting
+ * the same link updates the existing row instead of duplicating it.
+ */
+export async function createReferencePost(
+  input: CreateReferencePostInput,
+): Promise<{ id: number }> {
+  const externalId = input.url ?? `manual-${crypto.randomUUID()}`;
+  const timezone = DEFAULT_APP_TIMEZONE;
+  const row = await queryOne<{ id: number }>(
+    `insert into posts (platform, external_id, handle, url, caption, posted_at, views)
+     values ($1, $2, $3, $4, $5, (now() at time zone $6)::date, 0)
+     on conflict (platform, external_id) do update set
+       handle  = excluded.handle,
+       caption = coalesce(excluded.caption, posts.caption)
+     returning id`,
+    [input.platform, externalId, input.handle, input.url, input.caption, timezone],
+  );
+  if (!row) throw new Error("Reference post insert failed to return an id");
+  return row;
+}
+
+/** Store (or replace) the AI reverse-engineer breakdown for a reference post. */
+export async function saveReferenceBreakdown(
+  postId: number,
+  handle: string,
+  content: string,
+): Promise<void> {
+  await withTransaction(async (client) => {
+    await client.query(
+      `delete from insights where post_id = $1 and kind = 'breakdown'`,
+      [postId],
+    );
+    await client.query(
+      `insert into insights (post_id, handle, kind, content) values ($1, $2, 'breakdown', $3)`,
+      [postId, handle, content],
+    );
+  });
 }
 
 // --- History: my posts, newest first --------------------------------------
