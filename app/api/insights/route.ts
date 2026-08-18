@@ -51,7 +51,12 @@ Exactly 4 items in "patterns", no more, no fewer.
 
 export async function POST() {
   try {
-    const posts = await getPostsForAnalysis();
+    // Capped at 150 (not the function's full 300-row ceiling): the model
+    // is citing specific post ids/numbers for every pattern it finds, so
+    // more rows means a longer, more citation-heavy answer, not just a
+    // smarter one. 150 recent posts is still a large sample and keeps
+    // the response consistently well under the token budget below.
+    const posts = await getPostsForAnalysis(150);
     if (posts.length === 0) {
       return NextResponse.json(
         { error: "No posts found for your handle yet." },
@@ -65,15 +70,15 @@ export async function POST() {
     // Token budget set well above the ~4-item JSON payload we expect --
     // reasoning models spend part of max_tokens on internal thinking
     // before they emit the JSON itself. This route's input can run up to
-    // 300 rows of post data (see getPostsForAnalysis), which takes a lot
-    // more thinking to find cross-post patterns in than the other AI
-    // routes' much smaller inputs -- 4000 wasn't enough headroom once a
-    // real account's history filled that table in, so this needs a
-    // bigger budget than the others.
+    // 150 rows of post data, which takes a lot more thinking to find
+    // cross-post patterns in than the other AI routes' much smaller
+    // inputs -- both 4000 and 10000 turned out not to be enough
+    // headroom once a real account's full history was in play, so this
+    // gets a generous budget plus the smaller row cap above.
     const result = await generateJson<InsightsResponse>({
       system: SYSTEM_PROMPT,
       user: userPrompt,
-      maxTokens: 10000,
+      maxTokens: 16000,
     });
 
     if (!Array.isArray(result.patterns) || result.patterns.length !== 4) {
