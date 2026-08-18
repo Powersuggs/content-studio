@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateJson } from "@/lib/ai/generate-json";
 import { SIGNAL_READING_GUIDE, JSON_ONLY_INSTRUCTION } from "@/lib/ai/signals";
-import { getMyPostById, saveScript } from "@/lib/queries";
+import { getMyPostById, saveScript, getLendingFactsGuardrail } from "@/lib/queries";
 
 interface ScriptResponse {
   hook: string;
@@ -10,7 +10,7 @@ interface ScriptResponse {
   notes: string;
 }
 
-const SYSTEM_PROMPT = `
+const BASE_SYSTEM_PROMPT = `
 You are a scriptwriter for short-form video, working from a creator's own performance data.
 
 ${SIGNAL_READING_GUIDE}
@@ -68,8 +68,9 @@ Topic: ${topic}
 ${modelPostSection}
 `.trim();
 
+    const guardrail = await getLendingFactsGuardrail();
     const result = await generateJson<ScriptResponse>({
-      system: SYSTEM_PROMPT,
+      system: `${BASE_SYSTEM_PROMPT}\n\n${guardrail}`,
       user: userPrompt,
       // Scripts run longer than the other JSON payloads, so this needs
       // the largest budget of the four routes plus thinking headroom.

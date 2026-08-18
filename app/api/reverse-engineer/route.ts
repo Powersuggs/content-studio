@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateJson } from "@/lib/ai/generate-json";
 import { SIGNAL_READING_GUIDE, JSON_ONLY_INSTRUCTION } from "@/lib/ai/signals";
+import { getLendingFactsGuardrail } from "@/lib/queries";
 
 interface BreakdownResponse {
   hook: string;
@@ -12,7 +13,7 @@ interface BreakdownResponse {
   reusable_template: string;
 }
 
-const SYSTEM_PROMPT = `
+const BASE_SYSTEM_PROMPT = `
 You are an expert short-form video strategist. A creator is reverse-engineering someone ELSE's video (a competitor or inspiration account) so they can understand its structure and reuse the pattern -- not the content -- in their own videos.
 
 ${SIGNAL_READING_GUIDE}
@@ -71,8 +72,9 @@ Transcript:
 ${transcript || "(not provided -- infer what you reasonably can from the caption alone, and note in why_it_works that this is inferred, not transcribed)"}
 `.trim();
 
+    const guardrail = await getLendingFactsGuardrail();
     const result = await generateJson<BreakdownResponse>({
-      system: SYSTEM_PROMPT,
+      system: `${BASE_SYSTEM_PROMPT}\n\n${guardrail}`,
       user: userPrompt,
       // Skeleton + template is a modest payload, but keep generous
       // headroom for the model's internal thinking pass.

@@ -93,6 +93,89 @@ export async function updateProfile(
 }
 
 // ---------------------------------------------------------------------
+// Lending facts library: a real "sources & research" location. Each
+// row is one verified fact plus where it came from (source name/URL),
+// entered by the creator (or copied from a source he trusts) so every
+// AI writing feature is grounded in researched, cited facts instead of
+// generating specifics (caps, percentages, program rules) from general
+// model knowledge.
+// ---------------------------------------------------------------------
+
+export interface LendingFact {
+  id: number;
+  fact: string;
+  source_name: string | null;
+  source_url: string | null;
+  created_at: string;
+}
+
+export async function getLendingFacts(): Promise<LendingFact[]> {
+  return query<LendingFact>(
+    `select id, fact, source_name, source_url, created_at
+     from lending_facts
+     order by created_at desc`,
+  );
+}
+
+export interface AddLendingFactInput {
+  fact: string;
+  source_name?: string | null;
+  source_url?: string | null;
+}
+
+export async function addLendingFact(
+  input: AddLendingFactInput,
+): Promise<LendingFact> {
+  const fact = input.fact.trim();
+  if (!fact) throw new Error("fact is required");
+  const row = await queryOne<LendingFact>(
+    `insert into lending_facts (fact, source_name, source_url)
+     values ($1, $2, $3)
+     returning id, fact, source_name, source_url, created_at`,
+    [fact, input.source_name?.trim() || null, input.source_url?.trim() || null],
+  );
+  if (!row) throw new Error("Failed to save fact");
+  return row;
+}
+
+export async function deleteLendingFact(id: number): Promise<void> {
+  const row = await queryOne<{ id: number }>(
+    `delete from lending_facts where id = $1 returning id`,
+    [id],
+  );
+  if (!row) throw new Error("Fact not found");
+}
+
+/**
+ * Shared instruction block for any AI route that might state specific
+ * loan-program numbers, caps, or rules. Appended to those system
+ * prompts so the model treats verified, sourced facts as ground truth
+ * and writes around anything else instead of inventing a specific.
+ */
+export async function getLendingFactsGuardrail(): Promise<string> {
+  const facts = await getLendingFacts();
+  const factLines = facts
+    .map((f) => {
+      const source = f.source_name || f.source_url
+        ? ` (source: ${[f.source_name, f.source_url].filter(Boolean).join(" -- ")})`
+        : "";
+      return `- ${f.fact}${source}`;
+    })
+    .join("\n");
+
+  return `
+LENDING FACTS GUARDRAIL:
+${
+  facts.length > 0
+    ? `The creator has researched and verified the following facts about loan programs and lending rules, each tied to a source. Treat these as ground truth and never contradict them. When a fact has a source, you may mention where it comes from in general terms (e.g. "per VA guidelines") but do not fabricate a citation beyond what's given:\n${factLines}`
+    : "The creator has not entered any verified, sourced lending facts yet."
+}
+
+For any OTHER specific regulatory number, percentage, cap, program rule, or legal claim not covered by the facts above, do NOT state it as a specific fact -- do not guess or rely on general training knowledge for it. Write around it generally instead (e.g. "ask your loan officer about the exact seller-concession rules for your loan type" rather than inventing a percentage). This is a licensed lender's public content -- getting a specific wrong is a compliance risk, not just an error, so vague-but-correct always beats specific-but-guessed.
+`.trim();
+}
+
+// ---------------------------------------------------------------------
 // Recent posts rail
 // ---------------------------------------------------------------------
 export interface RecentPost {

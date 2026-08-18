@@ -10,6 +10,7 @@ import {
   Layers,
   Compass,
   History,
+  BookMarked,
 } from "lucide-react";
 
 export interface NavItem {
@@ -29,4 +30,5 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/boards", label: "Discover Boards", icon: Layers },
   { href: "/inspiration", label: "Inspiration", icon: Compass },
   { href: "/history", label: "History", icon: History },
+  { href: "/settings", label: "Sources & Facts", icon: BookMarked },
 ];
