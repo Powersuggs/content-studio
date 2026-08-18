@@ -4,6 +4,15 @@ import { SIGNAL_READING_GUIDE, JSON_ONLY_INSTRUCTION } from "@/lib/ai/signals";
 import { buildPostsTable } from "@/lib/ai/posts-table";
 import { getPostsForAnalysis, replaceInsights, type InsightKind } from "@/lib/queries";
 
+// Analyzing up to 300 rows of post history (see getPostsForAnalysis) and
+// reasoning across all of it for cross-post patterns takes real time --
+// well past the platform's default serverless timeout once an account
+// has a full history synced in. Without this, Vercel kills the function
+// mid-run, the browser's fetch never gets a response, and the
+// Regenerate button spins forever instead of showing an error. Same fix
+// as the /api/sync/trigger route, for the same underlying reason.
+export const maxDuration = 300;
+
 const VALID_KINDS: InsightKind[] = ["win", "warning", "idea"];
 
 interface RawPattern {

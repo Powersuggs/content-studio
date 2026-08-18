@@ -12,13 +12,23 @@ export default function RegenerateButton() {
   function run() {
     setError(null);
     startTransition(async () => {
-      const res = await fetch("/api/insights", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Couldn't regenerate insights");
-        return;
+      // This can be a genuinely long-running request (up to 300 posts
+      // of history to reason across), so failures here -- a dropped
+      // connection, a server timeout, anything -- must not leave the
+      // button stuck on "Regenerating..." forever. Every exit path
+      // through this function needs to land on either success or a
+      // visible error, never neither.
+      try {
+        const res = await fetch("/api/insights", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error ?? "Couldn't regenerate insights");
+          return;
+        }
+        router.refresh();
+      } catch {
+        setError("Couldn't reach the server -- check your connection and try again.");
       }
-      router.refresh();
     });
   }
 
