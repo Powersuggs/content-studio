@@ -1,9 +1,22 @@
-import { getLendingFacts } from "@/lib/queries";
+import { getLendingFacts, getDistinctLoanTypes } from "@/lib/queries";
 import AddLendingFactForm from "@/components/settings/AddLendingFactForm";
 import DeleteLendingFactButton from "@/components/settings/DeleteLendingFactButton";
 
 export default async function SettingsPage() {
-  const facts = await getLendingFacts();
+  const [facts, loanTypeSuggestions] = await Promise.all([
+    getLendingFacts(),
+    getDistinctLoanTypes(),
+  ]);
+
+  // Facts already come back grouped by loan type (see getLendingFacts'
+  // ORDER BY), so just bucket them here for rendering as sections
+  // instead of one flat list.
+  const grouped = new Map<string, typeof facts>();
+  for (const f of facts) {
+    const key = f.loan_type?.trim() || "General / unspecified";
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(f);
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 p-4 md:p-8">
@@ -13,11 +26,12 @@ export default async function SettingsPage() {
           This is the one place in the app for verified lending facts and where they came from.
           Hook Lab, Script Writer, and the Inspiration breakdown tool all read this list before
           writing anything -- they treat what&rsquo;s here as ground truth, and are told to write
-          around any specific number or rule that isn&rsquo;t covered here rather than guess at it.
+          around any specific number or rule that isn&rsquo;t covered here (including for a whole
+          loan type with nothing entered yet) rather than guess at it.
         </p>
       </div>
 
-      <AddLendingFactForm />
+      <AddLendingFactForm loanTypeSuggestions={loanTypeSuggestions} />
 
       <div>
         <h2 className="mb-3 text-sm font-semibold text-text">
@@ -29,37 +43,46 @@ export default async function SettingsPage() {
             rule you already double-checked.
           </div>
         ) : (
-          <ul className="space-y-3">
-            {facts.map((f) => (
-              <li key={f.id} className="rounded-xl border border-border bg-panel p-4">
-                <p className="text-sm text-text">{f.fact}</p>
-                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] text-muted">
-                    {f.source_name || f.source_url ? (
-                      <>
-                        Source:{" "}
-                        {f.source_url ? (
-                          <a
-                            href={f.source_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-accent hover:underline"
-                          >
-                            {f.source_name || f.source_url}
-                          </a>
-                        ) : (
-                          f.source_name
-                        )}
-                      </>
-                    ) : (
-                      "No source noted"
-                    )}
-                  </p>
-                  <DeleteLendingFactButton id={f.id} />
-                </div>
-              </li>
+          <div className="space-y-6">
+            {Array.from(grouped.entries()).map(([loanType, items]) => (
+              <section key={loanType}>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-faint">
+                  {loanType} ({items.length})
+                </h3>
+                <ul className="space-y-3">
+                  {items.map((f) => (
+                    <li key={f.id} className="rounded-xl border border-border bg-panel p-4">
+                      <p className="text-sm text-text">{f.fact}</p>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] text-muted">
+                          {f.source_name || f.source_url ? (
+                            <>
+                              Source:{" "}
+                              {f.source_url ? (
+                                <a
+                                  href={f.source_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-accent hover:underline"
+                                >
+                                  {f.source_name || f.source_url}
+                                </a>
+                              ) : (
+                                f.source_name
+                              )}
+                            </>
+                          ) : (
+                            "No source noted"
+                          )}
+                        </p>
+                        <DeleteLendingFactButton id={f.id} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
         )}
       </div>
     </div>

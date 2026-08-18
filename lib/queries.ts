@@ -104,6 +104,7 @@ export async function updateProfile(
 export interface LendingFact {
   id: number;
   fact: string;
+  loan_type: string | null;
   source_name: string | null;
   source_url: string | null;
   created_at: string;
@@ -111,14 +112,25 @@ export interface LendingFact {
 
 export async function getLendingFacts(): Promise<LendingFact[]> {
   return query<LendingFact>(
-    `select id, fact, source_name, source_url, created_at
+    `select id, fact, loan_type, source_name, source_url, created_at
      from lending_facts
-     order by created_at desc`,
+     order by coalesce(loan_type, 'zzz') asc, created_at desc`,
   );
+}
+
+/** Distinct loan types already in use, for the "Loan type" autocomplete. */
+export async function getDistinctLoanTypes(): Promise<string[]> {
+  const rows = await query<{ loan_type: string }>(
+    `select distinct loan_type from lending_facts
+     where loan_type is not null and loan_type <> ''
+     order by loan_type asc`,
+  );
+  return rows.map((r) => r.loan_type);
 }
 
 export interface AddLendingFactInput {
   fact: string;
+  loan_type?: string | null;
   source_name?: string | null;
   source_url?: string | null;
 }
@@ -129,10 +141,15 @@ export async function addLendingFact(
   const fact = input.fact.trim();
   if (!fact) throw new Error("fact is required");
   const row = await queryOne<LendingFact>(
-    `insert into lending_facts (fact, source_name, source_url)
-     values ($1, $2, $3)
-     returning id, fact, source_name, source_url, created_at`,
-    [fact, input.source_name?.trim() || null, input.source_url?.trim() || null],
+    `insert into lending_facts (fact, loan_type, source_name, source_url)
+     values ($1, $2, $3, $4)
+     returning id, fact, loan_type, source_name, source_url, created_at`,
+    [
+      fact,
+      input.loan_type?.trim() || null,
+      input.source_name?.trim() || null,
+      input.source_url?.trim() || null,
+    ],
   );
   if (!row) throw new Error("Failed to save fact");
   return row;
@@ -154,24 +171,39 @@ export async function deleteLendingFact(id: number): Promise<void> {
  */
 export async function getLendingFactsGuardrail(): Promise<string> {
   const facts = await getLendingFacts();
-  const factLines = facts
-    .map((f) => {
-      const source = f.source_name || f.source_url
-        ? ` (source: ${[f.source_name, f.source_url].filter(Boolean).join(" -- ")})`
-        : "";
-      return `- ${f.fact}${source}`;
+
+  // Group by loan type so the model can tell at a glance which
+  // program a fact applies to, and so it's obvious which loan types
+  // have no verified facts entered yet (and should be written around).
+  const byType = new Map<string, LendingFact[]>();
+  for (const f of facts) {
+    const key = f.loan_type?.trim() || "General / unspecified loan type";
+    if (!byType.has(key)) byType.set(key, []);
+    byType.get(key)!.push(f);
+  }
+  const factLines = Array.from(byType.entries())
+    .map(([type, items]) => {
+      const lines = items
+        .map((f) => {
+          const source = f.source_name || f.source_url
+            ? ` (source: ${[f.source_name, f.source_url].filter(Boolean).join(" -- ")})`
+            : "";
+          return `  - ${f.fact}${source}`;
+        })
+        .join("\n");
+      return `${type}:\n${lines}`;
     })
-    .join("\n");
+    .join("\n\n");
 
   return `
 LENDING FACTS GUARDRAIL:
 ${
   facts.length > 0
-    ? `The creator has researched and verified the following facts about loan programs and lending rules, each tied to a source. Treat these as ground truth and never contradict them. When a fact has a source, you may mention where it comes from in general terms (e.g. "per VA guidelines") but do not fabricate a citation beyond what's given:\n${factLines}`
+    ? `The creator has researched and verified the following facts about loan programs and lending rules, grouped by loan type and each tied to a source. Treat these as ground truth and never contradict them. A fact listed under one loan type (e.g. VA) applies ONLY to that loan type -- never carry a number or rule over to a different loan type (e.g. FHA, Conventional, USDA, Jumbo) just because it sounds similar. When a fact has a source, you may mention where it comes from in general terms (e.g. "per VA guidelines") but do not fabricate a citation beyond what's given:\n${factLines}`
     : "The creator has not entered any verified, sourced lending facts yet."
 }
 
-For any OTHER specific regulatory number, percentage, cap, program rule, or legal claim not covered by the facts above, do NOT state it as a specific fact -- do not guess or rely on general training knowledge for it. Write around it generally instead (e.g. "ask your loan officer about the exact seller-concession rules for your loan type" rather than inventing a percentage). This is a licensed lender's public content -- getting a specific wrong is a compliance risk, not just an error, so vague-but-correct always beats specific-but-guessed.
+For any OTHER specific regulatory number, percentage, cap, program rule, or legal claim not covered by the facts above -- including for a loan type that has no facts listed at all -- do NOT state it as a specific fact -- do not guess or rely on general training knowledge for it. Write around it generally instead (e.g. "ask your loan officer about the exact seller-concession rules for your loan type" rather than inventing a percentage). This is a licensed lender's public content -- getting a specific wrong is a compliance risk, not just an error, so vague-but-correct always beats specific-but-guessed.
 `.trim();
 }
 
