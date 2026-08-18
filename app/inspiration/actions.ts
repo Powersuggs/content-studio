@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createReferencePost, saveReferenceBreakdown } from "@/lib/queries";
+import { createReferencePost, saveReferenceBreakdown, deleteReferencePost } from "@/lib/queries";
 
 export interface ReferenceBreakdown {
   hook: string;
@@ -38,7 +38,10 @@ export interface SaveReferencePostInput {
 }
 
 export async function saveReferencePostAction(input: SaveReferencePostInput) {
-  const handle = input.handle.trim();
+  // Strip a leading "@" if the user typed the handle that way -- the UI
+  // adds its own "@" when displaying it, so keeping one in the stored
+  // value renders as "@@handle".
+  const handle = input.handle.trim().replace(/^@+/, "");
   if (!handle) throw new Error("A creator handle is required");
 
   const post = await createReferencePost({
@@ -54,4 +57,9 @@ export async function saveReferencePostAction(input: SaveReferencePostInput) {
 
   revalidatePath("/inspiration");
   return { id: post.id };
+}
+
+export async function deleteReferencePostAction(postId: number) {
+  await deleteReferencePost(postId);
+  revalidatePath("/inspiration");
 }

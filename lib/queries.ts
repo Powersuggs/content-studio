@@ -780,6 +780,23 @@ export async function getReferencePostsGroupedByHandle(): Promise<
   return grouped;
 }
 
+/**
+ * Remove a reference post from Inspiration. Scoped with the same
+ * `handle is distinct from mine` guard as the read query above, so this
+ * can never delete one of my own synced posts even if a bad id is
+ * passed in -- only imported reference posts are deletable here.
+ */
+export async function deleteReferencePost(postId: number): Promise<void> {
+  const myHandle = await getMyHandle();
+  const row = await queryOne<{ id: number }>(
+    `delete from posts
+     where id = $1 and handle is distinct from $2
+     returning id`,
+    [postId, myHandle],
+  );
+  if (!row) throw new Error("Reference post not found (or it belongs to your own handle)");
+}
+
 // --- Inspiration: importing a reference post from another creator ---------
 export interface CreateReferencePostInput {
   platform: "instagram" | "tiktok" | "reference";

@@ -1,6 +1,7 @@
 import { getReferencePostsGroupedByHandle } from "@/lib/queries";
 import AddReferenceForm from "@/components/inspiration/AddReferenceForm";
 import BulkImportForm from "@/components/inspiration/BulkImportForm";
+import DeleteReferenceButton from "@/components/inspiration/DeleteReferenceButton";
 
 export default async function InspirationPage() {
   const grouped = await getReferencePostsGroupedByHandle();
@@ -67,6 +68,9 @@ export default async function InspirationPage() {
                           </p>
                         </details>
                       )}
+                      <div className="mt-2 border-t border-border pt-2">
+                        <DeleteReferenceButton postId={post.id} />
+                      </div>
                     </div>
                   </div>
                 );
