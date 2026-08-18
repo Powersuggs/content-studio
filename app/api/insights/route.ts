@@ -55,11 +55,16 @@ export async function POST() {
 
     // Token budget set well above the ~4-item JSON payload we expect --
     // reasoning models spend part of max_tokens on internal thinking
-    // before they emit the JSON itself.
+    // before they emit the JSON itself. This route's input can run up to
+    // 300 rows of post data (see getPostsForAnalysis), which takes a lot
+    // more thinking to find cross-post patterns in than the other AI
+    // routes' much smaller inputs -- 4000 wasn't enough headroom once a
+    // real account's history filled that table in, so this needs a
+    // bigger budget than the others.
     const result = await generateJson<InsightsResponse>({
       system: SYSTEM_PROMPT,
       user: userPrompt,
-      maxTokens: 4000,
+      maxTokens: 10000,
     });
 
     if (!Array.isArray(result.patterns) || result.patterns.length !== 4) {
