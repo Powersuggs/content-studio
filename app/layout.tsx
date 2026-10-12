@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import AppShell from "@/components/AppShell";
+import AccountFooter from "@/components/AccountFooter";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,7 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="bg-bg text-text min-h-screen">
-        <AppShell>{children}</AppShell>
+        <AppShell accountFooter={<AccountFooter />}>{children}</AppShell>
       </body>
     </html>
   );

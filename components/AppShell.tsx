@@ -46,7 +46,18 @@ function Brand() {
   );
 }
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({
+  children,
+  accountFooter,
+}: {
+  children: React.ReactNode;
+  /**
+   * Rendered at the bottom of the sidebar and the mobile drawer. Passed in
+   * from the layout rather than imported here, because this is a client
+   * component and the footer needs to read the session on the server.
+   */
+  accountFooter?: React.ReactNode;
+}) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const pathname = usePathname();
 
@@ -69,6 +80,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:flex md:w-60 md:shrink-0 md:flex-col md:gap-6 md:border-r md:border-border md:bg-panel md:p-4">
         <Brand />
         <NavLinks />
+        {accountFooter}
       </aside>
 
       {/* Mobile top bar */}
@@ -112,6 +124,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
           <NavLinks onNavigate={() => setDrawerOpen(false)} />
+          {accountFooter}
         </div>
       </div>
 
