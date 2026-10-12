@@ -257,8 +257,8 @@ export interface InsightCard {
 export async function getRecentInsights(limit = 12): Promise<InsightCard[]> {
   const handle = await requireMyHandle();
   // Pattern insights are stored with handle directly (they summarize
-  // across many posts, not one), so filter on that -- never on an
-  // unscoped `select * from insights`.
+  // across many posts, not one), so filter on that as well as the
+  // account -- never read the insights table unfiltered.
   return query<InsightCard>(
     `select id, post_id, kind, content, created_at
      from insights

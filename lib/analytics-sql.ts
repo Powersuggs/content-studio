@@ -6,6 +6,7 @@
  */
 
 import { query } from "./db";
+import { currentAccountId } from "./auth/current-account";
 
 export const DEFAULT_APP_TIMEZONE = process.env.APP_TIMEZONE || "UTC";
 
@@ -24,8 +25,11 @@ export const DEFAULT_APP_TIMEZONE = process.env.APP_TIMEZONE || "UTC";
  *   const sql = `
  *     select ${postHappenedExpr(tzParamIndex)} as happened_on, views
  *     from posts
- *     where ${postHappenedExpr(tzParamIndex)} >= $1
+ *     where account_id = $4 and ${postHappenedExpr(tzParamIndex)} >= $1
  *   `;
+ *
+ * Every query over a per-account table binds account_id, always. See
+ * scripts/check-account-scoping.mjs, which fails the build otherwise.
  */
 export function postHappenedExpr(
   timezoneParamIndex: number,
@@ -62,7 +66,7 @@ export async function getMediansForHandle(
   opts: { since?: string; timezone?: string } = {},
 ): Promise<WindowedMedians> {
   const timezone = opts.timezone ?? DEFAULT_APP_TIMEZONE;
-  const params: unknown[] = [handle, timezone];
+  const params: unknown[] = [handle, timezone, await currentAccountId()];
   const timezoneParamIndex = 2;
 
   let sinceClause = "";
@@ -80,7 +84,7 @@ export async function getMediansForHandle(
       ${medianExpr("saves")}    as median_saves,
       ${medianExpr("reach")}    as median_reach
     from posts
-    where handle = $1
+    where handle = $1 and account_id = $3
     ${sinceClause}
   `;
 

@@ -100,7 +100,19 @@ async function makeAccount(label) {
   return { id, label, handle, marker, cookie: sessionCookie(id) };
 }
 
-const PAGES = ["/dashboard", "/settings", "/scripts", "/boards", "/history", "/inspiration"];
+const PAGES = [
+  "/dashboard",
+  "/settings",
+  "/scripts",
+  "/boards",
+  "/history",
+  "/inspiration",
+  "/autopsy",
+  "/patterns",
+  "/hooks",
+  "/session-prep",
+  "/session-mode",
+];
 
 /**
  * The severe failure is not two test accounts seeing each other. It is every
