@@ -33,6 +33,8 @@ const SCOPED_TABLES = [
   "credit_ledger",
   "render_jobs",
   "assets",
+  "voice_answers",
+  "voice_profile",
 ];
 
 /** Files whose job is to work across accounts, or before one exists. */
