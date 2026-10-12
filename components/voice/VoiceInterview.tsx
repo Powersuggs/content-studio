@@ -63,7 +63,7 @@ export default function VoiceInterview({
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-4 md:p-8">
+    <div className="space-y-6">
       <div className="space-y-2">
         <div className="flex items-baseline justify-between">
           <h1 className="text-lg font-semibold text-text">Your voice</h1>

@@ -120,6 +120,7 @@ Your ONLY job is to fix words the transcriber misheard. Common cases:
 
 Rules you must not break:
 - Do NOT improve the writing. Keep every filler word, false start, repetition and run-on sentence exactly as spoken.
+- Specifically KEEP: "um", "uh", "like", "you know", "I mean", doubled words ("the, the"), and any self-correction ("no, sorry, VA"). These are how the person speaks and they are the reason this transcript exists.
 - Do NOT change their word choice, grammar, or sentence structure.
 - Do NOT add or remove sentences.
 - Do NOT add punctuation beyond what is needed to keep the original sentence boundaries.

@@ -77,6 +77,7 @@ export async function POST(request: Request) {
       // 8 short lines is a small payload, but keep generous headroom for
       // the model's internal thinking pass.
       maxTokens: 4000,
+      useVoice: true,
     });
 
     if (!Array.isArray(result.hooks) || result.hooks.length !== 8) {

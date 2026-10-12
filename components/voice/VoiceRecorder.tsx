@@ -21,6 +21,11 @@ export default function VoiceRecorder({
   onTranscript: (text: string) => void;
   disabled?: boolean;
 }) {
+  // Kept so the raw transcript can be shown on request. If a correction ever
+  // reads wrong, this is how you tell whether the transcriber or the
+  // correction pass was responsible.
+  const [raw, setRaw] = useState<string | null>(null);
+  const [showRaw, setShowRaw] = useState(false);
   const [state, setState] = useState<State>("idle");
   const [error, setError] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
@@ -115,6 +120,8 @@ export default function VoiceRecorder({
       }
 
       onTranscript(data.text as string);
+      setRaw(data.corrected ? (data.raw as string) : null);
+      setShowRaw(false);
       setState("idle");
     } catch {
       setState("error");
@@ -161,6 +168,23 @@ export default function VoiceRecorder({
           <AlertCircle size={14} strokeWidth={2} className="mt-px shrink-0" />
           {error}
         </p>
+      )}
+
+      {raw && (
+        <div className="text-xs text-muted">
+          <button
+            type="button"
+            onClick={() => setShowRaw((v) => !v)}
+            className="underline underline-offset-2 hover:text-text"
+          >
+            {showRaw ? "Hide" : "Industry terms were corrected. See what was heard"}
+          </button>
+          {showRaw && (
+            <p className="mt-1 rounded-lg border border-border bg-panel-2 px-3 py-2 leading-relaxed">
+              {raw}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
