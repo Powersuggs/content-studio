@@ -46,14 +46,35 @@ export async function requireAccountId(): Promise<number> {
  * the account once rather than parsing the cookie twenty times.
  */
 export const currentAccountId = cache(async (): Promise<number> => {
+  const accountId = await currentAccountIdOrNull();
+  if (accountId === null) {
+    throw new Error(
+      "No account in scope. A request-path query must run behind middleware " +
+        "with a valid session; background work must be wrapped in runAsAccount().",
+    );
+  }
+  return accountId;
+});
+
+/**
+ * Same, but null instead of throwing.
+ *
+ * Used by the database layer, which must still run queries when there is no
+ * account yet: signing in reads the accounts table before any session exists.
+ * Those queries simply run without an account declared, and row-level security
+ * then hides every per-account table from them, which is the correct answer
+ * rather than an error.
+ */
+export const currentAccountIdOrNull = cache(async (): Promise<number | null> => {
   const background = getBackgroundAccountId();
   if (background !== null) return background;
 
-  const session = await getSession();
-  if (session) return session.accountId;
-
-  throw new Error(
-    "No account in scope. A request-path query must run behind middleware " +
-      "with a valid session; background work must be wrapped in runAsAccount().",
-  );
+  try {
+    const session = await getSession();
+    return session?.accountId ?? null;
+  } catch {
+    // cookies() throws outside a request scope (build-time prerender, a
+    // script). No session there, which is not an error.
+    return null;
+  }
 });

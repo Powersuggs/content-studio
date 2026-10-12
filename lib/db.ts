@@ -1,4 +1,5 @@
 import { Pool, types, type PoolClient } from "pg";
+import { currentAccountIdOrNull } from "./auth/current-account";
 
 // --- Type parser overrides -------------------------------------------------
 // By default node-postgres returns bigint (OID 20) as a string (since it
@@ -86,16 +87,70 @@ function getPool(): Pool {
 
 // --- Query helpers -------------------------------------------------------
 
+// --- Row-level security ----------------------------------------------------
+//
+// Postgres decides what a query may see, from `app.account_id` set on the
+// connection. Policies compare it against each row's account_id, so a query
+// that forgets its own filter returns nothing instead of another account's
+// rows. See migrations/0011_row_level_security.sql.
+//
+// The setting has to be LOCAL to a transaction. Connections are shared across
+// requests through a pooler, so a session-level setting would leak to whoever
+// got that connection next -- which would be worse than having none at all.
+//
+// Cost: an account-scoped query becomes BEGIN + set + query + COMMIT. BEGIN
+// and the set go in one round trip, so it is three instead of one. Set
+// DISABLE_DB_RLS_SCOPING=true to fall back to plain queries if this ever needs
+// to be switched off in a hurry; the application-level account filters are
+// still there underneath and remain the primary protection.
+
+function rlsDisabled(): boolean {
+  return process.env.DISABLE_DB_RLS_SCOPING === "true";
+}
+
+/**
+ * Declare the account for the current transaction. The id is checked to be a
+ * positive integer before interpolation, because set_config's third argument
+ * being `true` (local) cannot be combined with a parameterized value in the
+ * same round trip as BEGIN.
+ */
+function beginScoped(accountId: number): string {
+  if (!Number.isInteger(accountId) || accountId < 1) {
+    throw new Error(`beginScoped: refusing to scope to ${accountId}`);
+  }
+  return `begin; select set_config('app.account_id', '${accountId}', true);`;
+}
+
 /**
  * Run a parameterized query and return all rows.
+ *
+ * With an account in scope, runs inside a transaction that declares it, so
+ * row-level security can enforce ownership. Without one -- signing in, before
+ * any session exists -- runs plainly, and the policies then hide every
+ * per-account table from it, which is the correct answer.
  */
 export async function query<T = Record<string, unknown>>(
   text: string,
   params: unknown[] = [],
 ): Promise<T[]> {
-  const client = getPool();
-  const result = await client.query(text, params);
-  return result.rows as T[];
+  const accountId = rlsDisabled() ? null : await currentAccountIdOrNull();
+
+  if (accountId === null) {
+    const result = await getPool().query(text, params);
+    return result.rows as T[];
+  }
+
+  return withClient(async (client) => {
+    await client.query(beginScoped(accountId));
+    try {
+      const result = await client.query(text, params);
+      await client.query("commit");
+      return result.rows as T[];
+    } catch (err) {
+      await client.query("rollback");
+      throw err;
+    }
+  });
 }
 
 /**
@@ -132,8 +187,9 @@ export async function withClient<T>(
 export async function withTransaction<T>(
   fn: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
+  const accountId = rlsDisabled() ? null : await currentAccountIdOrNull();
   return withClient(async (client) => {
-    await client.query("begin");
+    await client.query(accountId === null ? "begin" : beginScoped(accountId));
     try {
       const result = await fn(client);
       await client.query("commit");
