@@ -34,6 +34,16 @@ export async function POST(request: Request) {
   if (password.length < MIN_PASSWORD_LENGTH) return back(request, "short");
   if (password !== confirm) return back(request, "mismatch");
 
+  // Same guard as the page: a pre-accounts cookie cannot overwrite a password
+  // that has already been set.
+  const self = await queryOne<{ claimed: boolean }>(
+    "select password_hash is not null as claimed from accounts where id = $1",
+    [session.accountId],
+  );
+  if (self?.claimed) {
+    return NextResponse.redirect(new URL("/api/logout", request.url), { status: 303 });
+  }
+
   const clash = await queryOne<{ id: number }>(
     "select id from accounts where lower(email) = $1 and id <> $2",
     [email, session.accountId],

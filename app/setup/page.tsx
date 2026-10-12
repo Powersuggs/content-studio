@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { requireAccountId } from "@/lib/auth/current-account";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/password";
 import { queryOne } from "@/lib/db";
@@ -20,6 +21,18 @@ export default async function SetupPage({
 }) {
   const params = await searchParams;
   const accountId = await requireAccountId();
+
+  // This page is reached with a pre-accounts cookie, which proves only that
+  // someone knew the shared password. If the account already has a password of
+  // its own, that cookie must not be able to replace it: discard it and make
+  // them sign in properly.
+  const claimed = await queryOne<{ claimed: boolean }>(
+    "select password_hash is not null as claimed from accounts where id = $1",
+    [accountId],
+  );
+  if (claimed?.claimed) {
+    redirect("/api/logout");
+  }
 
   const owned = await queryOne<{ posts: number; scripts: number; boards: number }>(
     `select (select count(*) from posts   where account_id = $1) as posts,
