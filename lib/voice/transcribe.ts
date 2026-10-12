@@ -49,14 +49,12 @@ export async function transcribeAudio(
   form.append("file", audio, "answer.webm");
   form.append("model", GROQ_MODEL);
   form.append("response_format", "json");
-  // Priming the model with the vocabulary it is about to hear measurably
-  // improves how it renders these terms, before any correction pass.
-  form.append(
-    "prompt",
-    "Mortgage lending conversation. Terms that may appear: NMLS, FHA, VA, USDA, " +
-      "conventional, jumbo, DSCR, DTI, LTV, PMI, MIP, escrow, underwriting, " +
-      "pre-approval, appraisal, points, APR, amortization, Realtor, eXp.",
-  );
+  // Priming the model with vocabulary it is about to hear measurably improves
+  // how it renders those terms, before any correction pass. The base list is
+  // general business and property, since the people using this are not all in
+  // the same trade, and the account's own saved terms are appended so a
+  // specialist's vocabulary gets primed too.
+  form.append("prompt", await buildVocabularyPrompt());
 
   const res = await fetch(GROQ_URL, {
     method: "POST",
@@ -88,6 +86,36 @@ export async function transcribeAudio(
 }
 
 /**
+ * The vocabulary hint sent to the transcriber.
+ *
+ * Generic enough to help any small business owner, then extended with
+ * whatever terms this particular account has saved, so a lender gets lending
+ * words and an agent gets property words without either being hardcoded.
+ */
+async function buildVocabularyPrompt(): Promise<string> {
+  const base =
+    "A business owner talking about their work and their customers. " +
+    "Terms that may appear: ROI, SEO, CRM, LLC, invoice, retainer, referral, " +
+    "escrow, appraisal, listing, closing, commission, contingency, pre-approval, " +
+    "underwriting, Realtor, MLS, HOA, APR, FHA, VA, USDA, DSCR, DTI, LTV, PMI, NMLS.";
+  try {
+    const facts = await getLendingFacts();
+    // Capitalised words and acronyms from their own saved facts are exactly
+    // the words a general transcriber is most likely to get wrong.
+    const terms = Array.from(
+      new Set(
+        facts
+          .flatMap((f) => `${f.fact} ${f.loan_type ?? ""}`.match(/\b[A-Z][A-Za-z0-9-]{1,}\b/g) ?? [])
+          .filter((t) => t.length > 1),
+      ),
+    ).slice(0, 40);
+    return terms.length ? `${base} Also: ${terms.join(", ")}.` : base;
+  } catch {
+    return base;
+  }
+}
+
+/**
  * Fix misheard industry terms and nothing else.
  *
  * Deliberately narrow. A model asked to "clean up" a transcript will quietly
@@ -108,15 +136,14 @@ async function correctJargon(raw: string): Promise<string> {
     const message = await getAnthropicClient().messages.create({
       model: AI_MODEL,
       max_tokens: 2000,
-      system: `You correct speech-to-text transcripts of mortgage and real estate professionals.
+      system: `You correct speech-to-text transcripts of business owners talking about their work.
 
-Your ONLY job is to fix words the transcriber misheard. Common cases:
-- "in Emma less" / "NMLS number" variants -> NMLS
-- "discer" / "D S C R" -> DSCR
-- "ess crow" -> escrow
-- "F H A" -> FHA, "V A" -> VA, "P M I" -> PMI, "D T I" -> DTI, "L T V" -> LTV
-- "pre approval" -> pre-approval
-- mangled company, program or place names
+Your ONLY job is to fix words the transcriber misheard. Typical cases:
+- Spelled-out acronyms that should be joined up: "S E O" -> SEO, "F H A" -> FHA, "R O I" -> ROI
+- Acronyms heard as words: "in Emma less" -> NMLS, "discer" -> DSCR, "em el es" -> MLS
+- Industry words heard phonetically: "ess crow" -> escrow, "contingent see" -> contingency
+- Hyphenation of standard terms: "pre approval" -> pre-approval
+- Mangled company, product, program or place names
 
 Rules you must not break:
 - Do NOT improve the writing. Keep every filler word, false start, repetition and run-on sentence exactly as spoken.

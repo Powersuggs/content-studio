@@ -1,11 +1,16 @@
 /**
  * The voice interview.
  *
- * These exist to capture the things a model cannot infer from a topic: who you
- * are talking to, what you refuse to say, the phrases you actually use, and
- * what you believe that your competitors do not. Generic "describe your brand
- * voice" questions produce generic answers, so every question here asks for a
- * specific example or a specific refusal instead.
+ * These exist to capture what a model cannot infer from a topic: who you are
+ * talking to, what you refuse to say, the phrases you actually use, and what
+ * you believe that your competitors do not.
+ *
+ * Written to work for any entrepreneur -- an agent, a coach, a lender, a
+ * contractor, someone selling a product -- because the people answering this
+ * are not all in the same business. So no question names an industry, a job
+ * title or a piece of jargon. Each one asks for a specific example or a
+ * specific refusal instead, because "describe your brand voice" reliably
+ * produces answers too generic to be worth storing.
  *
  * Designed to be answered OUT LOUD in under a minute each. Spoken answers
  * carry rhythm and word choice that typed answers flatten, which is most of
@@ -33,40 +38,41 @@ export const VOICE_QUESTIONS: VoiceQuestion[] = [
   {
     key: "audience_one_person",
     section: "Who you're talking to",
-    question: "Picture one real person you want to reach. Who are they?",
-    hint: "An actual client or someone like them. Age, job, where they are in life, what they just googled at 11pm.",
+    question: "Picture one real customer you'd love more of. Who are they?",
+    hint: "An actual person, not a demographic. What's their life like, what are they in the middle of?",
   },
   {
     key: "audience_fear",
     section: "Who you're talking to",
-    question: "What are they quietly afraid of that they would not say out loud?",
+    question: "What are they quietly worried about that they'd never say out loud?",
     hint: "Not the question they ask you. The one underneath it.",
   },
   {
     key: "audience_wrong_belief",
     section: "Who you're talking to",
-    question: "What do they believe about mortgages or buying that is just wrong?",
-    hint: "The myth you find yourself correcting over and over.",
+    question: "What do people believe about what you do that's just wrong?",
+    hint: "The misunderstanding you find yourself correcting over and over.",
   },
   {
     key: "audience_language",
     section: "Who you're talking to",
-    question: "How do they describe their situation in their own words?",
-    hint: "Their phrasing, not industry phrasing. What do they call a down payment, a pre-approval, their credit?",
+    question: "How do your customers describe their problem in their own words?",
+    hint: "Their phrasing, not your industry's. What do they call the thing you sell?",
   },
   {
     key: "audience_not_for",
     section: "Who you're talking to",
     question: "Who are you deliberately NOT for?",
-    hint: "The client you would refer elsewhere. Saying this sharpens everything else.",
+    hint: "The customer you'd turn away or refer elsewhere. Saying this sharpens everything else.",
   },
 
   // --- How you actually talk -------------------------------------------
   {
     key: "voice_explain_simply",
     section: "How you actually talk",
-    question: "Explain what a debt-to-income ratio is, the way you'd say it to a friend at a barbecue.",
-    hint: "Say it out loud, exactly as you would in person. This one is pure voice sample.",
+    question:
+      "Explain the thing you most often have to explain, the way you'd say it to a friend at a barbecue.",
+    hint: "Say it out loud, exactly as you would in person. This one is pure voice sample, so don't tidy it.",
   },
   {
     key: "voice_favourite_phrases",
@@ -84,13 +90,13 @@ export const VOICE_QUESTIONS: VoiceQuestion[] = [
     key: "voice_formality",
     section: "How you actually talk",
     question: "How formal are you with someone you've just met?",
-    hint: "Would you say 'Hey' or 'Good afternoon'? Do you swear? Do you use their first name immediately?",
+    hint: "Would you say 'Hey' or 'Good afternoon'? Do you swear? First names straight away?",
   },
   {
     key: "voice_open_and_close",
     section: "How you actually talk",
-    question: "How do you usually start a video, and how do you end one?",
-    hint: "Your actual habits, even if you think they're boring. Especially the call to action.",
+    question: "How do you usually start a video or a post, and how do you end one?",
+    hint: "Your real habits, even if you think they're boring. Especially how you ask for the next step.",
   },
   {
     key: "voice_long_or_short",
@@ -103,13 +109,13 @@ export const VOICE_QUESTIONS: VoiceQuestion[] = [
   {
     key: "belief_hot_take",
     section: "What you believe",
-    question: "What do you believe about lending that most loan officers would argue with?",
+    question: "What do you believe about your industry that most people in it would argue with?",
     hint: "A real opinion with an edge. Agreeable content is invisible content.",
   },
   {
     key: "belief_industry_wrong",
     section: "What you believe",
-    question: "What does the mortgage industry do that you think is bad for clients?",
+    question: "What does your industry do that's bad for the customer?",
     hint: "Be specific. Name the practice, not the vibe.",
   },
   {
@@ -121,46 +127,46 @@ export const VOICE_QUESTIONS: VoiceQuestion[] = [
   {
     key: "belief_why_this_job",
     section: "What you believe",
-    question: "Why do you do this job? Not the marketing answer.",
+    question: "Why do you do this for a living? Not the marketing answer.",
     hint: "If the honest answer is money and freedom, say money and freedom.",
   },
   {
     key: "belief_what_good_looks_like",
     section: "What you believe",
-    question: "What does a great outcome look like for a client of yours?",
-    hint: "Beyond 'they closed'. What is actually different for them afterwards?",
+    question: "What does a great outcome look like for someone who works with you?",
+    hint: "Beyond 'they bought'. What's actually different for them afterwards?",
   },
 
   // --- Proof you've earned ---------------------------------------------
   {
     key: "proof_best_story",
     section: "Proof you've earned",
-    question: "Tell the story of a client you're proudest of helping.",
+    question: "Tell the story of a customer you're proudest of helping.",
     hint: "Start where they were stuck. No names if you'd rather not.",
   },
   {
-    key: "proof_hardest_deal",
+    key: "proof_hardest_job",
     section: "Proof you've earned",
-    question: "What's the hardest deal you've got over the line, and how?",
+    question: "What's the hardest job you've got over the line, and how?",
     hint: "The one that should have fallen apart.",
   },
   {
-    key: "proof_credentials",
+    key: "proof_background",
     section: "Proof you've earned",
-    question: "What should people know about your background and licensing?",
-    hint: "NMLS number, which states, how long, anything that earns trust in one line.",
+    question: "What should people know about your background and credentials?",
+    hint: "How long, where, any licences or qualifications. Anything that earns trust in one line.",
   },
   {
     key: "proof_specialty",
     section: "Proof you've earned",
-    question: "What loan types or situations are you genuinely best at?",
+    question: "What are you genuinely best at, better than your competitors?",
     hint: "Where you'd back yourself against anyone local.",
   },
   {
     key: "proof_mistake",
     section: "Proof you've earned",
     question: "What have you got wrong, and what did it teach you?",
-    hint: "This one earns more trust than any win. Worth answering honestly.",
+    hint: "This earns more trust than any win. Worth answering honestly.",
   },
 
   // --- Lines you won't cross -------------------------------------------
@@ -174,7 +180,7 @@ export const VOICE_QUESTIONS: VoiceQuestion[] = [
     key: "limit_claims",
     section: "Lines you won't cross",
     question: "What claims must never be made on your behalf?",
-    hint: "Rates, approvals, guarantees. You're licensed, so this one is compliance as well as taste.",
+    hint: "Guarantees, numbers, promises about results. If your work is regulated, this is compliance as well as taste.",
   },
   {
     key: "limit_tone_wrong",
