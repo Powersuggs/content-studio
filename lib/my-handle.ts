@@ -1,4 +1,5 @@
 import { queryOne } from "./db";
+import { currentAccountId } from "./auth/current-account";
 
 /**
  * The single source of truth for "which posts are mine."
@@ -14,7 +15,8 @@ import { queryOne } from "./db";
  */
 export async function getMyHandle(): Promise<string | null> {
   const row = await queryOne<{ handle: string | null }>(
-    `select handle from profile where id = 1`,
+    `select handle from profile where account_id = $1`,
+    [await currentAccountId()],
   );
   return row?.handle ?? null;
 }

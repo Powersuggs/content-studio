@@ -1,6 +1,7 @@
 import { query, queryOne, withTransaction } from "./db";
 import { postHappenedExpr, medianExpr, DEFAULT_APP_TIMEZONE } from "./analytics-sql";
 import { getMyHandle, requireMyHandle } from "./my-handle";
+import { currentAccountId } from "./auth/current-account";
 
 // ---------------------------------------------------------------------
 // Profile
@@ -23,7 +24,8 @@ export async function getProfileHeader(): Promise<ProfileHeaderData> {
     display_name: string | null;
     bio: string | null;
     followers_count: number;
-  }>(`select handle, display_name, bio, followers_count from profile where id = 1`);
+  }>(`select handle, display_name, bio, followers_count from profile where account_id = $1`,
+     [await currentAccountId()]);
 
   const handle = row?.handle ?? null;
 
@@ -33,8 +35,8 @@ export async function getProfileHeader(): Promise<ProfileHeaderData> {
     const agg = await queryOne<{ total_likes: number; video_count: number }>(
       `select coalesce(sum(likes), 0) as total_likes, count(*) as video_count
        from posts
-       where handle = $1`,
-      [handle],
+       where handle = $1 and account_id = $2`,
+      [handle, await currentAccountId()],
     );
     total_likes = agg?.total_likes ?? 0;
     video_count = agg?.video_count ?? 0;
@@ -67,10 +69,11 @@ export interface UpdateProfileInput {
 export async function updateProfile(
   input: UpdateProfileInput,
 ): Promise<{ id: number }> {
+  const accountId = await currentAccountId();
   const row = await queryOne<{ id: number }>(
-    `insert into profile (id, display_name, handle, bio, followers_count, ig_user_id, ig_media_count)
-     values (1, $1, $2, $3, $4, $5, $6)
-     on conflict (id) do update set
+    `insert into profile (account_id, display_name, handle, bio, followers_count, ig_user_id, ig_media_count)
+     values ($7, $1, $2, $3, $4, $5, $6)
+     on conflict (account_id) do update set
        display_name    = coalesce(excluded.display_name, profile.display_name),
        handle          = coalesce(excluded.handle, profile.handle),
        bio             = coalesce(excluded.bio, profile.bio),
@@ -86,6 +89,7 @@ export async function updateProfile(
       input.followers_count ?? null,
       input.ig_user_id ?? null,
       input.ig_media_count ?? null,
+      accountId,
     ],
   );
   if (!row) throw new Error("Profile upsert failed to return an id");
@@ -114,7 +118,9 @@ export async function getLendingFacts(): Promise<LendingFact[]> {
   return query<LendingFact>(
     `select id, fact, loan_type, source_name, source_url, created_at
      from lending_facts
+     where account_id = $1
      order by coalesce(loan_type, 'zzz') asc, created_at desc`,
+    [await currentAccountId()],
   );
 }
 
@@ -122,8 +128,9 @@ export async function getLendingFacts(): Promise<LendingFact[]> {
 export async function getDistinctLoanTypes(): Promise<string[]> {
   const rows = await query<{ loan_type: string }>(
     `select distinct loan_type from lending_facts
-     where loan_type is not null and loan_type <> ''
+     where account_id = $1 and loan_type is not null and loan_type <> ''
      order by loan_type asc`,
+    [await currentAccountId()],
   );
   return rows.map((r) => r.loan_type);
 }
@@ -141,14 +148,15 @@ export async function addLendingFact(
   const fact = input.fact.trim();
   if (!fact) throw new Error("fact is required");
   const row = await queryOne<LendingFact>(
-    `insert into lending_facts (fact, loan_type, source_name, source_url)
-     values ($1, $2, $3, $4)
+    `insert into lending_facts (fact, loan_type, source_name, source_url, account_id)
+     values ($1, $2, $3, $4, $5)
      returning id, fact, loan_type, source_name, source_url, created_at`,
     [
       fact,
       input.loan_type?.trim() || null,
       input.source_name?.trim() || null,
       input.source_url?.trim() || null,
+      await currentAccountId(),
     ],
   );
   if (!row) throw new Error("Failed to save fact");
@@ -157,8 +165,8 @@ export async function addLendingFact(
 
 export async function deleteLendingFact(id: number): Promise<void> {
   const row = await queryOne<{ id: number }>(
-    `delete from lending_facts where id = $1 returning id`,
-    [id],
+    `delete from lending_facts where id = $1 and account_id = $2 returning id`,
+    [id, await currentAccountId()],
   );
   if (!row) throw new Error("Fact not found");
 }
@@ -222,13 +230,13 @@ export interface RecentPost {
 export async function getRecentPosts(limit = 20): Promise<RecentPost[]> {
   const handle = await requireMyHandle();
   const timezone = DEFAULT_APP_TIMEZONE;
-  const params: unknown[] = [handle, timezone, limit];
+  const params: unknown[] = [handle, timezone, limit, await currentAccountId()];
   return query<RecentPost>(
     `select
        id, thumb_url, caption, url, views,
        ${postHappenedExpr(2)} as happened_on
      from posts
-     where handle = $1
+     where handle = $1 and account_id = $4
      order by ${postHappenedExpr(2)} desc nulls last, id desc
      limit $3`,
     params,
@@ -249,15 +257,15 @@ export interface InsightCard {
 export async function getRecentInsights(limit = 12): Promise<InsightCard[]> {
   const handle = await requireMyHandle();
   // Pattern insights are stored with handle directly (they summarize
-  // across many posts, not one), so filter on that -- never on an
-  // unscoped `select * from insights`.
+  // across many posts, not one), so filter on that as well as the
+  // account -- never read the insights table unfiltered.
   return query<InsightCard>(
     `select id, post_id, kind, content, created_at
      from insights
-     where handle = $1
+     where handle = $1 and account_id = $3
      order by created_at desc
      limit $2`,
-    [handle, limit],
+    [handle, limit, await currentAccountId()],
   );
 }
 
@@ -286,8 +294,8 @@ export async function getAllTimeStats(): Promise<AllTimeStats> {
        coalesce(sum(shares), 0)          as total_shares,
        coalesce(avg(views), 0)           as average_views
      from posts
-     where handle = $1`,
-    [handle],
+     where handle = $1 and account_id = $2`,
+    [handle, await currentAccountId()],
   );
   return (
     row ?? {
@@ -343,7 +351,7 @@ export async function getAveragesLast30Days(): Promise<AveragesRow> {
      scoped as (
        select ${postHappenedExpr(2)} as happened, views, likes, saves, shares
        from posts
-       where handle = $1
+       where handle = $1 and account_id = $3
      )
      select
        (select avg(views)  from scoped, bounds where happened >= bounds.today - 29 and happened <= bounds.today)              as curr_views,
@@ -355,7 +363,7 @@ export async function getAveragesLast30Days(): Promise<AveragesRow> {
        (select avg(shares) from scoped, bounds where happened >= bounds.today - 29 and happened <= bounds.today)              as curr_shares,
        (select avg(shares) from scoped, bounds where happened >= bounds.today - 59 and happened <= bounds.today - 30)         as prev_shares
     `,
-    [handle, timezone],
+    [handle, timezone, await currentAccountId()],
   );
 
   const currViews = row?.curr_views ?? 0;
@@ -403,7 +411,7 @@ export async function getPostingHeatmap(): Promise<HeatmapDay[]> {
      scoped as (
        select ${postHappenedExpr(2)} as happened
        from posts
-       where handle = $1
+       where handle = $1 and account_id = $3
      )
      select
        to_char(days.day, 'YYYY-MM-DD') as day,
@@ -412,7 +420,7 @@ export async function getPostingHeatmap(): Promise<HeatmapDay[]> {
      left join scoped on scoped.happened = days.day
      group by days.day
      order by days.day asc`,
-    [handle, timezone],
+    [handle, timezone, await currentAccountId()],
   );
 }
 
@@ -447,10 +455,10 @@ export async function getPostsForAnalysis(limit = 300): Promise<PostForAnalysis[
        duration_s, avg_watch_s,
        ${postHappenedExpr(2)} as happened_on
      from posts
-     where handle = $1
+     where handle = $1 and account_id = $4
      order by ${postHappenedExpr(2)} desc nulls last, id desc
      limit $3`,
-    [handle, timezone, limit],
+    [handle, timezone, limit, await currentAccountId()],
   );
 }
 
@@ -475,8 +483,8 @@ export async function getMyMedianRates(): Promise<MedianRates> {
        ${medianExpr("views::float8 / nullif(reach, 0)")}                as median_views_to_reach,
        ${medianExpr("avg_watch_s / nullif(duration_s, 0)")}             as median_watch_rate
      from posts
-     where handle = $1`,
-    [handle],
+     where handle = $1 and account_id = $2`,
+    [handle, await currentAccountId()],
   );
   return (
     row ?? {
@@ -509,8 +517,8 @@ export async function getMyPostById(postId: number): Promise<PostDetail | null> 
        duration_s, avg_watch_s, review, verdict, pillar,
        ${postHappenedExpr(3)} as happened_on
      from posts
-     where id = $1 and handle = $2`,
-    [postId, handle, timezone],
+     where id = $1 and handle = $2 and account_id = $4`,
+    [postId, handle, timezone, await currentAccountId()],
   );
 }
 
@@ -529,9 +537,9 @@ export async function updatePostPillar(
   const row = await queryOne<{ id: number }>(
     `update posts
      set pillar = $1
-     where id = $2 and handle = $3
+     where id = $2 and handle = $3 and account_id = $4
      returning id`,
-    [cleaned, postId, handle],
+    [cleaned, postId, handle, await currentAccountId()],
   );
   if (!row) throw new Error("Post not found for this handle");
   return row;
@@ -543,9 +551,9 @@ export async function getDistinctPillars(): Promise<string[]> {
   const rows = await query<{ pillar: string }>(
     `select distinct pillar
      from posts
-     where handle = $1 and pillar is not null and pillar <> ''
+     where handle = $1 and account_id = $2 and pillar is not null and pillar <> ''
      order by pillar asc`,
-    [handle],
+    [handle, await currentAccountId()],
   );
   return rows.map((r) => r.pillar);
 }
@@ -571,10 +579,10 @@ export async function getPillarPerformance(): Promise<PillarPerformance[]> {
        avg(saves)  as avg_saves,
        avg(shares) as avg_shares
      from posts
-     where handle = $1
+     where handle = $1 and account_id = $2
      group by coalesce(nullif(pillar, ''), 'Untagged')
      order by avg_views desc nulls last`,
-    [handle],
+    [handle, await currentAccountId()],
   );
 }
 
@@ -590,9 +598,9 @@ export async function saveReview(
   const row = await queryOne<{ id: number }>(
     `update posts
      set review = $1, verdict = $2
-     where id = $3 and handle = $4
+     where id = $3 and handle = $4 and account_id = $5
      returning id`,
-    [review, verdict, postId, handle],
+    [review, verdict, postId, handle, await currentAccountId()],
   );
   if (!row) throw new Error("Post not found for this handle");
   return row;
@@ -610,12 +618,13 @@ export async function replaceInsights(
   patterns: PatternInsightInput[],
 ): Promise<void> {
   const handle = await requireMyHandle();
+  const accountId = await currentAccountId();
   await withTransaction(async (client) => {
-    await client.query(`delete from insights where handle = $1`, [handle]);
+    await client.query(`delete from insights where handle = $1 and account_id = $2`, [handle, accountId]);
     for (const pattern of patterns) {
       await client.query(
-        `insert into insights (post_id, handle, kind, content) values (null, $1, $2, $3)`,
-        [handle, pattern.kind, pattern.content],
+        `insert into insights (post_id, handle, kind, content, account_id) values (null, $1, $2, $3, $4)`,
+        [handle, pattern.kind, pattern.content, accountId],
       );
     }
   });
@@ -631,10 +640,10 @@ export interface SaveScriptInput {
 /** Store a generated script draft. RETURNING id per the upsert convention (this is a fresh insert, not a keyed upsert). */
 export async function saveScript(input: SaveScriptInput): Promise<{ id: number }> {
   const row = await queryOne<{ id: number }>(
-    `insert into scripts (post_id, title, hook, body, status)
-     values ($1, $2, $3, $4, 'draft')
+    `insert into scripts (post_id, title, hook, body, status, account_id)
+     values ($1, $2, $3, $4, 'draft', $5)
      returning id`,
-    [input.postId, input.title, input.hook, input.body],
+    [input.postId, input.title, input.hook, input.body, await currentAccountId()],
   );
   if (!row) throw new Error("Script insert failed to return an id");
   return row;
@@ -665,16 +674,16 @@ export async function getPostsBelowMedianViews(): Promise<UnderperformingPost[]>
     `with stats as (
        select ${medianExpr("views")} as median_views
        from posts
-       where handle = $1
+       where handle = $1 and account_id = $3
      )
      select
        posts.id, posts.caption, posts.thumb_url, posts.views, posts.pillar,
        ${postHappenedExpr(2, "posts")} as happened_on,
        stats.median_views
      from posts, stats
-     where posts.handle = $1 and posts.views < stats.median_views
+     where posts.handle = $1 and posts.account_id = $3 and posts.views < stats.median_views
      order by posts.views asc`,
-    [handle, timezone],
+    [handle, timezone, await currentAccountId()],
   );
 }
 
@@ -701,14 +710,14 @@ export async function getPostingCadence(): Promise<CadenceStats> {
      scoped as (
        select ${postHappenedExpr(2)} as happened
        from posts
-       where handle = $1
+       where handle = $1 and account_id = $3
      )
      select
        (select count(*) from scoped, bounds where happened >= bounds.today - 29 and happened <= bounds.today)::int as posts_last_30,
        (select count(distinct happened) from scoped, bounds where happened >= bounds.today - 29 and happened <= bounds.today)::int as distinct_days_last_30,
        (select count(*) from scoped, bounds where happened >= bounds.today - 59 and happened <= bounds.today - 30)::int as posts_prior_30
     `,
-    [handle, timezone],
+    [handle, timezone, await currentAccountId()],
   );
 
   const postsLast30 = row?.posts_last_30 ?? 0;
@@ -740,10 +749,10 @@ export async function getTopPostsForRemake(limit = 5): Promise<RemakeCandidate[]
   return query<RemakeCandidate>(
     `select id, caption, thumb_url, views, ${postHappenedExpr(2)} as happened_on
      from posts
-     where handle = $1
+     where handle = $1 and account_id = $4
      order by views desc
      limit $3`,
-    [handle, timezone, limit],
+    [handle, timezone, limit, await currentAccountId()],
   );
 }
 
@@ -765,8 +774,8 @@ export async function updateScriptStatus(
   status: ScriptStatus,
 ): Promise<{ id: number }> {
   const row = await queryOne<{ id: number }>(
-    `update scripts set status = $1 where id = $2 returning id`,
-    [status, id],
+    `update scripts set status = $1 where id = $2 and account_id = $3 returning id`,
+    [status, id, await currentAccountId()],
   );
   if (!row) throw new Error("Script not found");
   return row;
@@ -780,8 +789,9 @@ export async function getQueuedScripts(): Promise<ScriptRecord[]> {
   return query<ScriptRecord>(
     `select id, post_id, title, hook, body, status, created_at
      from scripts
-     where status = 'queued'
+     where status = 'queued' and account_id = $1
      order by created_at asc`,
+    [await currentAccountId()],
   );
 }
 
@@ -798,15 +808,17 @@ export async function getBoardsList(): Promise<BoardSummary[]> {
     `select boards.id, boards.name, boards.description, count(board_posts.post_id)::int as post_count
      from boards
      left join board_posts on board_posts.board_id = boards.id
+     where boards.account_id = $1
      group by boards.id
      order by boards.created_at desc`,
+    [await currentAccountId()],
   );
 }
 
 export async function createBoard(name: string, description: string | null): Promise<{ id: number }> {
   const row = await queryOne<{ id: number }>(
-    `insert into boards (name, description) values ($1, $2) returning id`,
-    [name, description],
+    `insert into boards (name, description, account_id) values ($1, $2, $3) returning id`,
+    [name, description, await currentAccountId()],
   );
   if (!row) throw new Error("Board insert failed to return an id");
   return row;
@@ -828,9 +840,9 @@ export async function getBoardTogglePosts(boardId: number): Promise<BoardPostTog
        (board_posts.post_id is not null) as in_board
      from posts
      left join board_posts on board_posts.board_id = $2 and board_posts.post_id = posts.id
-     where posts.handle = $1
+     where posts.handle = $1 and posts.account_id = $3
      order by posts.id desc`,
-    [handle, boardId],
+    [handle, boardId, await currentAccountId()],
   );
 }
 
@@ -838,15 +850,26 @@ export async function togglePostInBoard(
   boardId: number,
   postId: number,
 ): Promise<{ in_board: boolean }> {
+  const accountId = await currentAccountId();
+  // Verify both the board and the post belong to this account before
+  // touching the join table, so a forged id cannot attach someone else's
+  // post to your board or vice versa.
+  const owned = await queryOne<{ ok: boolean }>(
+    `select exists(select 1 from boards where id = $1 and account_id = $3)
+        and exists(select 1 from posts  where id = $2 and account_id = $3) as ok`,
+    [boardId, postId, accountId],
+  );
+  if (!owned?.ok) throw new Error("Board or post not found for this account");
+
   const existing = await queryOne<{ board_id: number }>(
-    `select board_id from board_posts where board_id = $1 and post_id = $2`,
-    [boardId, postId],
+    `select board_id from board_posts where board_id = $1 and post_id = $2 and account_id = $3`,
+    [boardId, postId, accountId],
   );
   if (existing) {
-    await query(`delete from board_posts where board_id = $1 and post_id = $2`, [boardId, postId]);
+    await query(`delete from board_posts where board_id = $1 and post_id = $2 and account_id = $3`, [boardId, postId, accountId]);
     return { in_board: false };
   }
-  await query(`insert into board_posts (board_id, post_id) values ($1, $2)`, [boardId, postId]);
+  await query(`insert into board_posts (board_id, post_id, account_id) values ($1, $2, $3)`, [boardId, postId, accountId]);
   return { in_board: true };
 }
 
@@ -880,12 +903,13 @@ export async function getReferencePostsGroupedByHandle(): Promise<
      left join lateral (
        select content from insights
        where insights.post_id = p.id and insights.kind = 'breakdown'
+         and insights.account_id = p.account_id
        order by insights.created_at desc
        limit 1
      ) i on true
-     where p.handle is distinct from $1
+     where p.handle is distinct from $1 and p.account_id = $3
      order by p.handle asc, ${postHappenedExpr(2, "p")} desc nulls last`,
-    [myHandle, timezone],
+    [myHandle, timezone, await currentAccountId()],
   );
   const grouped: Record<string, ReferencePost[]> = {};
   for (const row of rows) {
@@ -905,9 +929,9 @@ export async function deleteReferencePost(postId: number): Promise<void> {
   const myHandle = await getMyHandle();
   const row = await queryOne<{ id: number }>(
     `delete from posts
-     where id = $1 and handle is distinct from $2
+     where id = $1 and handle is distinct from $2 and account_id = $3
      returning id`,
-    [postId, myHandle],
+    [postId, myHandle, await currentAccountId()],
   );
   if (!row) throw new Error("Reference post not found (or it belongs to your own handle)");
 }
@@ -931,16 +955,17 @@ export interface CreateReferencePostInput {
 export async function createReferencePost(
   input: CreateReferencePostInput,
 ): Promise<{ id: number }> {
+  const accountId = await currentAccountId();
   const externalId = input.url ?? `manual-${crypto.randomUUID()}`;
   const timezone = DEFAULT_APP_TIMEZONE;
   const row = await queryOne<{ id: number }>(
-    `insert into posts (platform, external_id, handle, url, caption, posted_at, views)
-     values ($1, $2, $3, $4, $5, (now() at time zone $6)::date, 0)
-     on conflict (platform, external_id) do update set
+    `insert into posts (account_id, platform, external_id, handle, url, caption, posted_at, views)
+     values ($7, $1, $2, $3, $4, $5, (now() at time zone $6)::date, 0)
+     on conflict (account_id, platform, external_id) do update set
        handle  = excluded.handle,
        caption = coalesce(excluded.caption, posts.caption)
      returning id`,
-    [input.platform, externalId, input.handle, input.url, input.caption, timezone],
+    [input.platform, externalId, input.handle, input.url, input.caption, timezone, accountId],
   );
   if (!row) throw new Error("Reference post insert failed to return an id");
   return row;
@@ -952,14 +977,15 @@ export async function saveReferenceBreakdown(
   handle: string,
   content: string,
 ): Promise<void> {
+  const accountId = await currentAccountId();
   await withTransaction(async (client) => {
     await client.query(
-      `delete from insights where post_id = $1 and kind = 'breakdown'`,
-      [postId],
+      `delete from insights where post_id = $1 and kind = 'breakdown' and account_id = $2`,
+      [postId, accountId],
     );
     await client.query(
-      `insert into insights (post_id, handle, kind, content) values ($1, $2, 'breakdown', $3)`,
-      [postId, handle, content],
+      `insert into insights (post_id, handle, kind, content, account_id) values ($1, $2, 'breakdown', $3, $4)`,
+      [postId, handle, content, accountId],
     );
   });
 }
@@ -975,10 +1001,10 @@ export async function getAllMyPostsHistory(limit = 500): Promise<HistoryPost[]> 
   return query<HistoryPost>(
     `select id, thumb_url, caption, url, views, pillar, ${postHappenedExpr(2)} as happened_on
      from posts
-     where handle = $1
+     where handle = $1 and account_id = $4
      order by ${postHappenedExpr(2)} desc nulls last, id desc
      limit $3`,
-    [handle, timezone, limit],
+    [handle, timezone, limit, await currentAccountId()],
   );
 }
 
@@ -1011,13 +1037,14 @@ export interface UpsertPostInput {
  * point of re-syncing.
  */
 export async function upsertPost(input: UpsertPostInput): Promise<{ id: number }> {
+  const accountId = await currentAccountId();
   const row = await queryOne<{ id: number }>(
     `insert into posts (
-       platform, external_id, handle, url, thumb_url, caption, posted_at,
+       account_id, platform, external_id, handle, url, thumb_url, caption, posted_at,
        views, likes, comments, shares, saves, reach
      )
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-     on conflict (platform, external_id) do update set
+     values ($14, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     on conflict (account_id, platform, external_id) do update set
        handle     = coalesce(excluded.handle, posts.handle),
        url        = coalesce(excluded.url, posts.url),
        thumb_url  = coalesce(excluded.thumb_url, posts.thumb_url),
@@ -1044,6 +1071,7 @@ export async function upsertPost(input: UpsertPostInput): Promise<{ id: number }
       input.shares,
       input.saves,
       input.reach,
+      accountId,
     ],
   );
   if (!row) throw new Error("Post upsert failed to return an id");
@@ -1070,12 +1098,12 @@ export async function getPostsNeedingWatchTimeBackfill(
   return query<WatchTimeCandidate>(
     `select id, external_id
      from posts
-     where handle = $1
+     where handle = $1 and account_id = $4
      order by
        (watch_time_synced_at is null) desc,
        ${postHappenedExpr(2)} desc nulls last
      limit $3`,
-    [handle, timezone, limit],
+    [handle, timezone, limit, await currentAccountId()],
   );
 }
 
@@ -1087,8 +1115,8 @@ export async function updateWatchTime(
   await queryOne(
     `update posts
      set avg_watch_s = $1, total_watch_s = $2, watch_time_synced_at = now()
-     where id = $3`,
-    [avgWatchS, totalWatchS, postId],
+     where id = $3 and account_id = $4`,
+    [avgWatchS, totalWatchS, postId, await currentAccountId()],
   );
 }
 
@@ -1099,7 +1127,8 @@ export interface SyncStatus {
 
 export async function getSyncStatus(): Promise<SyncStatus> {
   const row = await queryOne<SyncStatus>(
-    `select sync_status, last_synced_at::text as last_synced_at from profile where id = 1`,
+    `select sync_status, last_synced_at::text as last_synced_at from profile where account_id = $1`,
+    [await currentAccountId()],
   );
   return row ?? { sync_status: "idle", last_synced_at: null };
 }

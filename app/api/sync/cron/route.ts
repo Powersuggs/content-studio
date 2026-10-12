@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { runInstagramSync } from "@/lib/ig/sync";
+import { runAsAccount } from "@/lib/auth/background-account";
+import { query } from "@/lib/db";
 
 export const maxDuration = 300;
+export const runtime = "nodejs";
 
 /**
  * The nightly sync, as a real platform scheduled function (see
@@ -24,12 +27,32 @@ export async function GET(request: Request) {
     }
   }
 
-  try {
-    const summary = await runInstagramSync();
-    return NextResponse.json(summary);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[sync/cron] failed:", err);
-    return NextResponse.json({ error: message }, { status: 500 });
+  // A cron request carries no session, so there is no account to infer.
+  // Sync each account that actually has an Instagram connection, declaring
+  // the account explicitly so every query underneath is scoped to it. One
+  // account failing must not stop the others.
+  const accounts = await query<{ account_id: number }>(
+    `select distinct a.account_id
+       from auth a
+       join accounts acc on acc.id = a.account_id and acc.status = 'active'
+      where a.access_token is not null
+      order by a.account_id`,
+  );
+
+  const targets = accounts.length > 0 ? accounts.map((r) => r.account_id) : [1];
+  const results: Record<string, unknown>[] = [];
+
+  for (const accountId of targets) {
+    try {
+      const summary = await runAsAccount(accountId, () => runInstagramSync());
+      results.push({ accountId, ok: true, ...summary });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      console.error(`[sync/cron] account ${accountId} failed:`, err);
+      results.push({ accountId, ok: false, error: message });
+    }
   }
+
+  const anyFailed = results.some((r) => r.ok === false);
+  return NextResponse.json({ accounts: results }, { status: anyFailed ? 207 : 200 });
 }

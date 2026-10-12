@@ -1,4 +1,5 @@
 import { queryOne } from "@/lib/db";
+import { currentAccountId } from "@/lib/auth/current-account";
 
 /**
  * The token starts life in an env var, but after the first refresh the
@@ -10,8 +11,10 @@ export async function getStoredAccessToken(): Promise<{
   token: string;
   refreshedAt: Date | null;
 } | null> {
+  const accountId = await currentAccountId();
   const row = await queryOne<{ access_token: string | null; token_refreshed_at: string | null }>(
-    `select access_token, token_refreshed_at from auth where id = 1`,
+    `select access_token, token_refreshed_at from auth where account_id = $1`,
+    [accountId],
   );
 
   if (row?.access_token) {
@@ -51,14 +54,15 @@ export async function persistAccessToken(
   token: string,
   refreshedAt: Date | null,
 ): Promise<void> {
+  const accountId = await currentAccountId();
   await queryOne(
-    `insert into auth (id, access_token, token_refreshed_at)
-     values (1, $1, $2)
-     on conflict (id) do update set
+    `insert into auth (account_id, access_token, token_refreshed_at)
+     values ($3, $1, $2)
+     on conflict (account_id) do update set
        access_token       = coalesce(excluded.access_token, auth.access_token),
        token_refreshed_at = coalesce(excluded.token_refreshed_at, auth.token_refreshed_at),
        updated_at         = now()
      returning id`,
-    [token, refreshedAt ? refreshedAt.toISOString() : null],
+    [token, refreshedAt ? refreshedAt.toISOString() : null, accountId],
   );
 }

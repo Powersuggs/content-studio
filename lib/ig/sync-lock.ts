@@ -1,4 +1,5 @@
 import { queryOne } from "@/lib/db";
+import { currentAccountId } from "@/lib/auth/current-account";
 
 const DEFAULT_SKIP_WINDOW_MINUTES = 10; // don't re-run if one finished this recently
 const DEFAULT_STALE_AFTER_MINUTES = 30; // a "running" lock older than this is treated as abandoned (crashed run)
@@ -21,10 +22,11 @@ export async function acquireSyncLock(
   const skipWindow = opts.skipWindowMinutes ?? DEFAULT_SKIP_WINDOW_MINUTES;
   const staleAfter = opts.staleAfterMinutes ?? DEFAULT_STALE_AFTER_MINUTES;
 
+  const accountId = await currentAccountId();
   const claimed = await queryOne<{ id: number }>(
     `update profile
      set sync_status = 'running', sync_started_at = now()
-     where id = 1
+     where account_id = $3
        and (
          -- idle and not synced within the skip window
          (sync_status = 'idle' and (last_synced_at is null or last_synced_at < now() - ($1 || ' minutes')::interval))
@@ -32,14 +34,15 @@ export async function acquireSyncLock(
          or (sync_status = 'running' and sync_started_at < now() - ($2 || ' minutes')::interval)
        )
      returning id`,
-    [String(skipWindow), String(staleAfter)],
+    [String(skipWindow), String(staleAfter), accountId],
   );
 
   if (claimed) return { acquired: true };
 
   // Figure out *why* we didn't get it, just for a clearer log/response.
   const current = await queryOne<{ sync_status: string; last_synced_at: string | null }>(
-    `select sync_status, last_synced_at from profile where id = 1`,
+    `select sync_status, last_synced_at from profile where account_id = $1`,
+    [accountId],
   );
   if (current?.sync_status === "running") {
     return { acquired: false, reason: "already-running" };
@@ -49,14 +52,18 @@ export async function acquireSyncLock(
 
 /** Release the lock after a successful sync and stamp last_synced_at. */
 export async function releaseSyncLockSuccess(): Promise<void> {
+  const accountId = await currentAccountId();
   await queryOne(
-    `update profile set sync_status = 'idle', sync_started_at = null, last_synced_at = now() where id = 1`,
+    `update profile set sync_status = 'idle', sync_started_at = null, last_synced_at = now() where account_id = $1`,
+    [accountId],
   );
 }
 
 /** Release the lock after a failed sync WITHOUT touching last_synced_at, so the next attempt isn't skipped as "recent". */
 export async function releaseSyncLockFailure(): Promise<void> {
+  const accountId = await currentAccountId();
   await queryOne(
-    `update profile set sync_status = 'idle', sync_started_at = null where id = 1`,
+    `update profile set sync_status = 'idle', sync_started_at = null where account_id = $1`,
+    [accountId],
   );
 }
