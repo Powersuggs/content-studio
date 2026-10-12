@@ -75,6 +75,7 @@ ${modelPostSection}
       // Scripts run longer than the other JSON payloads, so this needs
       // the largest budget of the four routes plus thinking headroom.
       maxTokens: 6000,
+      useVoice: true,
     });
 
     const saved = await saveScript({
