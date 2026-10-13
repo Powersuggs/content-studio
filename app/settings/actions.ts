@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { addLendingFact, deleteLendingFact } from "@/lib/queries";
+import { saveHandle } from "@/lib/social/handles";
 
 export async function addLendingFactAction(input: {
   fact: string;
@@ -20,5 +21,17 @@ export async function addLendingFactAction(input: {
 
 export async function deleteLendingFactAction(id: number) {
   await deleteLendingFact(id);
+  revalidatePath("/settings");
+}
+
+/**
+ * Saves one platform's handle. An empty value removes it, which is what
+ * clearing the box and pressing save is understood to mean.
+ */
+export async function saveSocialHandleAction(
+  platform: string,
+  handle: string,
+): Promise<void> {
+  await saveHandle(platform, handle);
   revalidatePath("/settings");
 }

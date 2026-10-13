@@ -2,6 +2,8 @@ import { getLendingFacts, getDistinctLoanTypes } from "@/lib/queries";
 import AddLendingFactForm from "@/components/settings/AddLendingFactForm";
 import DeleteLendingFactButton from "@/components/settings/DeleteLendingFactButton";
 import InstagramConnection from "@/components/settings/InstagramConnection";
+import SocialHandles from "@/components/settings/SocialHandles";
+import { listHandles } from "@/lib/social/handles";
 
 /**
  * Messages the Instagram OAuth routes hand back in the query string. They
@@ -49,9 +51,12 @@ export default async function SettingsPage({
     ig_error?: string;
   }>;
 }) {
-  const [facts, loanTypeSuggestions, params] = await Promise.all([
+  const [facts, loanTypeSuggestions, socialHandles, params] = await Promise.all([
     getLendingFacts(),
     getDistinctLoanTypes(),
+    // A brand new account has no handles and no table rows; an empty list is
+    // the normal first state, not an error.
+    listHandles().catch(() => []),
     searchParams,
   ]);
 
@@ -86,6 +91,8 @@ export default async function SettingsPage({
       />
 
       <InstagramConnection />
+
+      <SocialHandles initial={socialHandles} />
 
       <AddLendingFactForm loanTypeSuggestions={loanTypeSuggestions} />
 
