@@ -46,6 +46,24 @@ function Brand() {
   );
 }
 
+/**
+ * Pages reachable without a session. They get no sidebar: every link in it
+ * would bounce a visitor straight to /login, and Meta's App Review opens the
+ * data deletion page as a stranger.
+ */
+const BARE_PATHS = [
+  "/login",
+  "/instagram-data-deletion",
+  "/privacy",
+  "/terms",
+  "/data-deletion",
+];
+
+function isBare(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return BARE_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
 export default function AppShell({
   children,
   accountFooter,
@@ -73,6 +91,10 @@ export default function AppShell({
       document.body.style.overflow = "";
     };
   }, [drawerOpen]);
+
+  if (isBare(pathname)) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen md:flex">

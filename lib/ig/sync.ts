@@ -4,7 +4,13 @@ import {
   fetchWatchTime,
   refreshLongLivedToken,
 } from "./client";
-import { getStoredAccessToken, persistAccessToken } from "./token-store";
+import { needsRefresh } from "./oauth";
+import {
+  getConnection,
+  persistRefreshedToken,
+  persistUsername,
+  type InstagramConnection,
+} from "./token-store";
 import { resolvePostedAt } from "./resolve-date";
 import {
   upsertPost,
@@ -19,26 +25,34 @@ import {
   releaseSyncLockFailure,
 } from "./sync-lock";
 
-// Refresh proactively once the token is this many days old, well inside
-// Instagram's 60-day expiry, so a run that gets skipped once or twice
-// (locked out, offline, etc.) still leaves plenty of runway.
-const TOKEN_REFRESH_THRESHOLD_DAYS = 5;
-
 // Watch-time requires one request per post (see client.ts), so this is
 // capped per run rather than backfilling the whole library at once --
 // the rest fills in over subsequent runs.
 const WATCH_TIME_BATCH_SIZE = 30;
 
+/**
+ * Keeps the long-lived token alive.
+ *
+ * The decision of *whether* to refresh lives in needsRefresh(), which knows
+ * the two rules that matter: Instagram refuses to refresh a token less than
+ * 24 hours old, and an already-expired token cannot be refreshed at all --
+ * that one needs the person to reconnect, and no amount of retrying will
+ * substitute.
+ */
 async function maybeRefreshAccessToken(
-  token: string,
-  refreshedAt: Date | null,
+  connection: InstagramConnection,
 ): Promise<string> {
-  const ageMs = refreshedAt ? Date.now() - refreshedAt.getTime() : Infinity;
-  const thresholdMs = TOKEN_REFRESH_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
-  if (ageMs < thresholdMs) return token;
+  if (!needsRefresh(connection.expiresAt, connection.refreshedAt)) {
+    return connection.token;
+  }
 
-  const refreshed = await refreshLongLivedToken(token);
-  await persistAccessToken(refreshed.access_token, new Date());
+  const refreshed = await refreshLongLivedToken(connection.token);
+  const refreshedAt = new Date();
+  const expiresAt = refreshed.expires_in
+    ? new Date(refreshedAt.getTime() + refreshed.expires_in * 1000)
+    : null;
+
+  await persistRefreshedToken(refreshed.access_token, refreshedAt, expiresAt);
   return refreshed.access_token;
 }
 
@@ -56,22 +70,19 @@ export async function runInstagramSync(): Promise<SyncSummary> {
   }
 
   try {
-    const igUserId = process.env.INSTAGRAM_USER_ID;
-    if (!igUserId) {
-      throw new Error("INSTAGRAM_USER_ID environment variable is not set");
+    // Whose Instagram this is comes from the account's own row now, not from
+    // a global environment variable. A sync run therefore syncs exactly the
+    // account it is running as, and an account with nothing connected is a
+    // no-op rather than an error: that is the normal state for a new signup,
+    // and the scheduler walks every account.
+    const connection = await getConnection();
+    if (!connection) {
+      await releaseSyncLockSuccess();
+      return { ran: false, reason: "no Instagram account connected" };
     }
 
-    const stored = await getStoredAccessToken();
-    if (!stored) {
-      throw new Error(
-        "No Instagram access token available (set INSTAGRAM_ACCESS_TOKEN)",
-      );
-    }
-
-    const accessToken = await maybeRefreshAccessToken(
-      stored.token,
-      stored.refreshedAt,
-    );
+    const igUserId = connection.igUserId;
+    const accessToken = await maybeRefreshAccessToken(connection);
     const timezone = DEFAULT_APP_TIMEZONE;
 
     // --- Profile -------------------------------------------------------
@@ -84,6 +95,13 @@ export async function runInstagramSync(): Promise<SyncSummary> {
       ig_user_id: profile.id,
       ig_media_count: profile.media_count ?? null,
     });
+
+    // Keep the handle shown on the settings page honest -- people do rename
+    // their Instagram account. Only written when it actually changed, so the
+    // common case stays a read.
+    if (profile.username && profile.username !== connection.username) {
+      await persistUsername(profile.username);
+    }
 
     // --- Media, paginated, insights expanded inline ---------------------
     let postsUpserted = 0;
