@@ -4,7 +4,33 @@ import { verifySessionToken } from "@/lib/auth/session";
 // /login, /api/login: how you GET a session in the first place.
 // /api/sync/cron: authenticated separately, via CRON_SECRET (the platform
 //   scheduler doesn't have a browser session/cookie to send).
-const PUBLIC_PATHS = ["/login", "/api/login", "/api/sync/cron"];
+//
+// The Instagram OAuth callback and Meta's two platform callbacks are public
+// by necessity and authenticated by signature instead of by cookie:
+//   /api/instagram/callback       -- carries our own HMAC-signed `state`;
+//                                    trusting the cookie here would be the
+//                                    login-CSRF hole.
+//   /api/instagram/deauthorize    -- Meta POSTs a signed_request.
+//   /api/instagram/data-deletion  -- same, and Meta sends no cookie ever.
+//   /instagram-data-deletion/...  -- the status page Meta's reviewer opens
+//                                    cold, from a confirmation code, with no
+//                                    account here at all.
+// The three policy pages are public because Meta's App Review requires a
+// privacy policy, terms, and deletion instructions at URLs a reviewer can
+// open without an account -- and because a policy you must log in to read is
+// not a policy.
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/login",
+  "/api/sync/cron",
+  "/api/instagram/callback",
+  "/api/instagram/deauthorize",
+  "/api/instagram/data-deletion",
+  "/instagram-data-deletion",
+  "/privacy",
+  "/terms",
+  "/data-deletion",
+];
 
 // Reachable ONLY while holding a pre-accounts session, so the owner can claim
 // their account. Everything else redirects there until they have, and anyone

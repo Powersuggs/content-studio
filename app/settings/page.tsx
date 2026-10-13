@@ -1,11 +1,58 @@
 import { getLendingFacts, getDistinctLoanTypes } from "@/lib/queries";
 import AddLendingFactForm from "@/components/settings/AddLendingFactForm";
 import DeleteLendingFactButton from "@/components/settings/DeleteLendingFactButton";
+import InstagramConnection from "@/components/settings/InstagramConnection";
 
-export default async function SettingsPage() {
-  const [facts, loanTypeSuggestions] = await Promise.all([
+/**
+ * Messages the Instagram OAuth routes hand back in the query string. They
+ * arrive as text rather than codes because they come from four different
+ * failure points -- Instagram's error, our state check, the token exchange,
+ * and the duplicate-account check -- and a code table would have to be kept
+ * in step with all four.
+ */
+function ConnectionBanner({
+  ok,
+  warn,
+  info,
+  error,
+}: {
+  ok?: string;
+  warn?: string;
+  info?: string;
+  error?: string;
+}) {
+  const message = ok ?? warn ?? info ?? error;
+  if (!message) return null;
+
+  const tone = ok
+    ? "border-accent/40 bg-accent/10 text-accent"
+    : error
+      ? "border-warn/40 bg-warn/10 text-warn"
+      : warn
+        ? "border-warn/40 bg-warn/10 text-warn"
+        : "border-border bg-panel-2 text-muted";
+
+  return (
+    <p className={`rounded-lg border px-3 py-2 text-sm ${tone}`} role="status">
+      {message}
+    </p>
+  );
+}
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    ig_ok?: string;
+    ig_warn?: string;
+    ig_info?: string;
+    ig_error?: string;
+  }>;
+}) {
+  const [facts, loanTypeSuggestions, params] = await Promise.all([
     getLendingFacts(),
     getDistinctLoanTypes(),
+    searchParams,
   ]);
 
   // Facts already come back grouped by loan type (see getLendingFacts'
@@ -30,6 +77,15 @@ export default async function SettingsPage() {
           loan type with nothing entered yet) rather than guess at it.
         </p>
       </div>
+
+      <ConnectionBanner
+        ok={params.ig_ok}
+        warn={params.ig_warn}
+        info={params.ig_info}
+        error={params.ig_error}
+      />
+
+      <InstagramConnection />
 
       <AddLendingFactForm loanTypeSuggestions={loanTypeSuggestions} />
 

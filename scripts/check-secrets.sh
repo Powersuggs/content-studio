@@ -53,7 +53,11 @@ else
 
   hit=0
   for pattern in "${patterns[@]}"; do
-    if echo "$staged" | grep -EnP "$pattern" > /tmp/secret-hits.$$; then
+    # -P only. `grep -EnP` is an error ("conflicting matchers specified"),
+    # which under `set -e`-free `if` just looked like "no match" -- so this
+    # whole scan silently passed everything for as long as it existed.
+    # The patterns are PCRE: (?i) and [[:space:]] both work there.
+    if echo "$staged" | grep -nP "$pattern" > /tmp/secret-hits.$$; then
       hit=1
       echo "  possible match for pattern: $pattern"
       sed 's/^/    /' /tmp/secret-hits.$$
