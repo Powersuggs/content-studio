@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { addLendingFact, deleteLendingFact } from "@/lib/queries";
 import { saveHandle } from "@/lib/social/handles";
+import { createInvite, revokeInvite } from "@/lib/auth/invites";
+import { getSession } from "@/lib/auth/current-account";
+import { OWNER_ACCOUNT_ID } from "@/lib/auth/session";
 
 export async function addLendingFactAction(input: {
   fact: string;
@@ -33,5 +36,32 @@ export async function saveSocialHandleAction(
   handle: string,
 ): Promise<void> {
   await saveHandle(platform, handle);
+  revalidatePath("/settings");
+}
+
+/**
+ * Only the owner issues invites. Checked here rather than only in the UI:
+ * hiding a button does not stop anyone calling the action directly.
+ */
+async function assertOwner(): Promise<void> {
+  const session = await getSession();
+  if (!session || session.accountId !== OWNER_ACCOUNT_ID) {
+    throw new Error("Only the owner can manage invite codes.");
+  }
+}
+
+export async function createInviteAction(input: {
+  note?: string;
+  maxUses?: number;
+}): Promise<string> {
+  await assertOwner();
+  const code = await createInvite(input);
+  revalidatePath("/settings");
+  return code;
+}
+
+export async function revokeInviteAction(code: string): Promise<void> {
+  await assertOwner();
+  await revokeInvite(code);
   revalidatePath("/settings");
 }

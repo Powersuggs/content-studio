@@ -3,7 +3,11 @@ import AddLendingFactForm from "@/components/settings/AddLendingFactForm";
 import DeleteLendingFactButton from "@/components/settings/DeleteLendingFactButton";
 import InstagramConnection from "@/components/settings/InstagramConnection";
 import SocialHandles from "@/components/settings/SocialHandles";
+import InviteCodes from "@/components/settings/InviteCodes";
 import { listHandles } from "@/lib/social/handles";
+import { listInvites } from "@/lib/auth/invites";
+import { getSession } from "@/lib/auth/current-account";
+import { OWNER_ACCOUNT_ID } from "@/lib/auth/session";
 
 /**
  * Messages the Instagram OAuth routes hand back in the query string. They
@@ -60,6 +64,12 @@ export default async function SettingsPage({
     searchParams,
   ]);
 
+  // Invites are the owner's to issue. A member never sees the panel, and the
+  // actions behind it re-check rather than trusting that.
+  const session = await getSession();
+  const isOwner = session?.accountId === OWNER_ACCOUNT_ID;
+  const invites = isOwner ? await listInvites().catch(() => []) : [];
+
   // Facts already come back grouped by loan type (see getLendingFacts'
   // ORDER BY), so just bucket them here for rendering as sections
   // instead of one flat list.
@@ -93,6 +103,8 @@ export default async function SettingsPage({
       <InstagramConnection />
 
       <SocialHandles initial={socialHandles} />
+
+      {isOwner && <InviteCodes initial={invites} />}
 
       <AddLendingFactForm loanTypeSuggestions={loanTypeSuggestions} />
 
