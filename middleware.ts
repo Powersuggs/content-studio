@@ -22,6 +22,9 @@ import { verifySessionToken } from "@/lib/auth/session";
 const PUBLIC_PATHS = [
   "/login",
   "/api/login",
+  // Creating an account necessarily happens before you have one.
+  "/signup",
+  "/api/signup",
   "/api/sync/cron",
   "/api/instagram/callback",
   "/api/instagram/deauthorize",

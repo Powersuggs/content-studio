@@ -53,6 +53,7 @@ function Brand() {
  */
 const BARE_PATHS = [
   "/login",
+  "/signup",
   "/instagram-data-deletion",
   "/privacy",
   "/terms",
