@@ -9,6 +9,7 @@ import {
   getConnection,
   persistRefreshedToken,
   persistUsername,
+  persistIgUserId,
   type InstagramConnection,
 } from "./token-store";
 import { resolvePostedAt } from "./resolve-date";
@@ -101,6 +102,14 @@ export async function runInstagramSync(): Promise<SyncSummary> {
     // common case stays a read.
     if (profile.username && profile.username !== connection.username) {
       await persistUsername(profile.username);
+    }
+
+    // Repair a connection that stored the app-scoped id from the OAuth
+    // exchange. Nothing depends on this value for requests any more, but
+    // leaving it wrong would keep showing the wrong id on the settings page
+    // and would keep the duplicate-connection index guarding the wrong key.
+    if (profile.id && profile.id !== connection.igUserId) {
+      await persistIgUserId(profile.id);
     }
 
     // --- Media, paginated, insights expanded inline ---------------------

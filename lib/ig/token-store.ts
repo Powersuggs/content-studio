@@ -185,6 +185,23 @@ export async function persistRefreshedToken(
   );
 }
 
+/**
+ * Corrects the stored Instagram id.
+ *
+ * The OAuth token exchange hands back an app-scoped user id, which the
+ * Graph paths reject. Whatever `/me` reports is the id those paths accept,
+ * so the first sync after connecting quietly repairs a row that stored the
+ * wrong one, rather than needing everyone to reconnect.
+ */
+export async function persistIgUserId(igUserId: string): Promise<void> {
+  const accountId = await currentAccountId();
+  await queryOne(
+    `update auth set ig_user_id = $2, updated_at = now()
+      where account_id = $1 returning id`,
+    [accountId, igUserId],
+  );
+}
+
 export async function persistUsername(username: string): Promise<void> {
   const accountId = await currentAccountId();
   await queryOne(
