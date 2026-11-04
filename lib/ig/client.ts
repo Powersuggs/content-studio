@@ -68,14 +68,40 @@ export interface IgProfileResponse {
   media_count?: number;
 }
 
+const PROFILE_FIELDS = "id,username,name,biography,followers_count,media_count";
+
+/**
+ * The account's own profile.
+ *
+ * Asks for `/me` rather than `/<stored id>`. The two IDs Instagram hands
+ * out are not interchangeable: the OAuth token exchange returns an
+ * app-scoped user id, while these Graph paths want the Instagram
+ * professional account id. Storing the first and requesting the second is
+ * what broke this sync -- every call came back "Object with ID ... does
+ * not exist". `/me` is resolved from the token itself, so it cannot be
+ * the wrong id.
+ *
+ * `igUserId` is still accepted, and used only as a fallback if `/me` is
+ * refused, so a connection that somehow depends on the old shape keeps
+ * working rather than failing closed.
+ */
 export async function fetchProfile(
-  igUserId: string,
+  igUserId: string | null,
   accessToken: string,
 ): Promise<IgProfileResponse> {
-  return graphFetch<IgProfileResponse>(`/${igUserId}`, {
-    fields: "id,username,name,biography,followers_count,media_count",
-    access_token: accessToken,
-  });
+  try {
+    return await graphFetch<IgProfileResponse>("/me", {
+      fields: PROFILE_FIELDS,
+      access_token: accessToken,
+    });
+  } catch (err) {
+    if (!igUserId) throw err;
+    console.warn("[ig/client] /me refused, falling back to the stored id:", err);
+    return graphFetch<IgProfileResponse>(`/${igUserId}`, {
+      fields: PROFILE_FIELDS,
+      access_token: accessToken,
+    });
+  }
 }
 
 // -----------------------------------------------------------------------
@@ -185,12 +211,15 @@ function isPreConversionInsightsError(err: unknown): boolean {
  * accounts where every post postdates the Business/Creator conversion.
  */
 export async function* iterateAllMedia(
-  igUserId: string,
+  igUserId: string | null,
   accessToken: string,
   pageSize = 50,
 ): AsyncGenerator<NormalizedMedia[]> {
   let nextUrl: string | null = null;
-  const basePath = `/${igUserId}/media`;
+  // Token-scoped, for the same reason as fetchProfile above: the stored id
+  // may be the app-scoped one, which these paths reject.
+  const basePath = "/me/media";
+  void igUserId;
 
   async function fetchPage(includeInsights: boolean): Promise<IgMediaPage> {
     if (nextUrl) {

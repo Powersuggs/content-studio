@@ -80,9 +80,14 @@ export async function GET(request: NextRequest) {
     // account context the signed state proved.
     await runAsAccount(verified.accountId, async () => {
       let username: string | null = null;
+      // The id to keep is whatever `/me` reports, not the app-scoped one the
+      // token exchange returned: only the former is accepted by the Graph
+      // paths this app calls.
+      let resolvedId = connection.igUserId;
       try {
         const profile = await fetchProfile(connection.igUserId, connection.accessToken);
         username = profile.username ?? null;
+        if (profile.id) resolvedId = profile.id;
       } catch (err) {
         // A failed profile lookup is not a failed connection. The token is
         // valid; the username is a nicety the next sync will fill in.
@@ -90,7 +95,7 @@ export async function GET(request: NextRequest) {
       }
 
       await persistConnection({
-        igUserId: connection.igUserId,
+        igUserId: resolvedId,
         accessToken: connection.accessToken,
         refreshedAt: new Date(),
         expiresAt: connection.expiresAt,
