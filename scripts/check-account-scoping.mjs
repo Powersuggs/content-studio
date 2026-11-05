@@ -36,6 +36,8 @@ const SCOPED_TABLES = [
   "voice_answers",
   "voice_profile",
   "social_handles",
+  "ideas",
+  "idea_outputs",
 ];
 
 /** Files whose job is to work across accounts, or before one exists. */

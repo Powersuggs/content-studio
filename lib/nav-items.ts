@@ -12,6 +12,7 @@ import {
   History,
   BookMarked,
   Fingerprint,
+  Lightbulb,
 } from "lucide-react";
 
 export interface NavItem {
@@ -23,6 +24,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/voice", label: "Your Voice", icon: Fingerprint },
+  { href: "/ideas", label: "Ideas", icon: Lightbulb },
   { href: "/autopsy", label: "Autopsy", icon: Stethoscope },
   { href: "/patterns", label: "Pattern Reader", icon: Sparkles },
   { href: "/scripts", label: "Script Writer", icon: PenLine },
