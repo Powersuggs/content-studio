@@ -163,10 +163,11 @@ try {
       where relrowsecurity and relforcerowsecurity
         and relname in ('posts','insights','remakes','scripts','boards','board_posts',
                         'profile','auth','lending_facts','credit_ledger','render_jobs','assets',
-                        'voice_answers','voice_profile','social_handles')`,
+                        'voice_answers','voice_profile','social_handles',
+                        'ideas','idea_outputs')`,
   );
-  check("all 15 tables have FORCE row level security", forced.rows[0].n === 15,
-    `${forced.rows[0].n} of 15 -- without FORCE the owner bypasses every policy`);
+  check("all 17 tables have FORCE row level security", forced.rows[0].n === 17,
+    `${forced.rows[0].n} of 17 -- without FORCE the owner bypasses every policy`);
 
   // 8. Login must still work, so accounts itself must NOT be locked.
   const loginable = await withNoAccount("select count(*)::int as n from accounts");

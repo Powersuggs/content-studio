@@ -1,8 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Play, Pause, Check } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Play,
+  Pause,
+  Check,
+  Video,
+  VideoOff,
+  Circle,
+  Square,
+  Maximize,
+  Minimize,
+} from "lucide-react";
 import { markFilmedAction } from "@/app/session-mode/actions";
+import { useRecorder } from "./useRecorder";
 
 export interface QueuedScriptItem {
   id: number;
@@ -17,8 +30,14 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
   const [textSize, setTextSize] = useState(32); // px
   const [playing, setPlaying] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  // How much the video is dimmed behind the words. White text on a bright
+  // window or a pale shirt is unreadable, and the right amount depends
+  // entirely on where someone is filming, so it is a control, not a guess.
+  const [scrim, setScrim] = useState(0.45);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   // Accumulated scroll position as a float. We assign this whole value
   // to scrollTop every frame rather than doing `scrollTop += delta`:
   // scrollTop is stored as an integer by the browser, so incrementing it
@@ -30,6 +49,14 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
   const lastTimeRef = useRef<number | null>(null);
 
   const current = remaining[index] as QueuedScriptItem | undefined;
+
+  const slug = (current?.hook || "take")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40) || "take";
+  const stamp = new Date().toISOString().slice(0, 10);
+  const camera = useRecorder(`content-studio-${slug}-${stamp}`);
 
   // Reset scroll position when switching scripts.
   useEffect(() => {
@@ -69,6 +96,27 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, speed]);
 
+  // Filming wants the whole screen: the app's sidebar is both a distraction
+  // and about a fifth of the width that the words could be using.
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await shellRef.current?.requestFullscreen();
+      }
+    } catch {
+      // Refused (iPhone Safari does not allow it on arbitrary elements).
+      // The prompter still works, just windowed.
+    }
+  }
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
   function goNext() {
     setPlaying(false);
     setIndex((i) => Math.min(i + 1, remaining.length - 1));
@@ -102,26 +150,78 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
     );
   }
 
+  const cameraOn = camera.state === "on";
+
   return (
-    <div className="flex h-screen flex-col bg-bg">
-      {/* Prompter text -- NO smooth-scroll behavior on this container.
-          Smooth-scroll behavior turns every frame's scrollTop assignment
-          into its own competing CSS animation, fighting the rAF loop. */}
-      <div ref={containerRef} className="flex-1 overflow-y-auto px-6 py-16 sm:px-16">
-        <div className="mx-auto max-w-3xl">
-          <p
-            className="font-semibold text-text"
-            style={{ fontSize: textSize * 1.3 }}
-          >
-            {current.hook}
-          </p>
-          <p
-            className="mt-8 whitespace-pre-wrap leading-relaxed text-text"
-            style={{ fontSize: textSize }}
-          >
-            {current.body}
-          </p>
-          <div style={{ height: "60vh" }} />
+    <div ref={shellRef} className="flex h-screen flex-col bg-bg">
+      <div className="relative min-h-0 flex-1">
+        {/* The camera, underneath everything. Mirrored for the person
+            reading; the recording itself is not flipped. */}
+        <video
+          ref={camera.videoRef}
+          playsInline
+          muted
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
+            cameraOn ? "opacity-100" : "opacity-0"
+          }`}
+          style={{ transform: "scaleX(-1)" }}
+        />
+        {/* Dimmer, so the words stay readable over whatever is behind them. */}
+        {cameraOn && (
+          <div
+            className="absolute inset-0 bg-black transition-opacity"
+            style={{ opacity: scrim }}
+          />
+        )}
+
+        {camera.state === "error" && camera.error && (
+          <div className="absolute inset-x-0 top-0 z-20 p-4">
+            <p className="mx-auto max-w-md rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-center text-sm text-warn">
+              {camera.error}
+            </p>
+          </div>
+        )}
+
+        {camera.recording && (
+          <div className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5">
+            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
+            <span className="font-mono text-sm text-white">
+              {Math.floor(camera.elapsed / 60)}:
+              {String(camera.elapsed % 60).padStart(2, "0")}
+            </span>
+          </div>
+        )}
+
+        {/* Prompter text -- NO smooth-scroll behavior on this container.
+            Smooth-scroll behavior turns every frame's scrollTop assignment
+            into its own competing CSS animation, fighting the rAF loop. */}
+        <div
+          ref={containerRef}
+          className="absolute inset-0 overflow-y-auto px-6 py-16 sm:px-16"
+        >
+          <div className="mx-auto max-w-3xl">
+            <p
+              className={`font-semibold ${cameraOn ? "text-white" : "text-text"}`}
+              style={{
+                fontSize: textSize * 1.3,
+                textShadow: cameraOn ? "0 2px 12px rgba(0,0,0,0.9)" : undefined,
+              }}
+            >
+              {current.hook}
+            </p>
+            <p
+              className={`mt-8 whitespace-pre-wrap leading-relaxed ${
+                cameraOn ? "text-white" : "text-text"
+              }`}
+              style={{
+                fontSize: textSize,
+                textShadow: cameraOn ? "0 2px 12px rgba(0,0,0,0.9)" : undefined,
+              }}
+            >
+              {current.body}
+            </p>
+            <div style={{ height: "60vh" }} />
+          </div>
         </div>
       </div>
 
@@ -179,6 +279,76 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
               className="w-24 accent-[var(--accent)]"
             />
           </label>
+
+          {cameraOn && (
+            <label className="flex items-center gap-2 text-xs text-faint">
+              Dim
+              <input
+                type="range"
+                min={0}
+                max={0.9}
+                step={0.05}
+                value={scrim}
+                onChange={(e) => setScrim(Number(e.target.value))}
+                className="w-24 accent-[var(--accent)]"
+              />
+            </label>
+          )}
+
+          {camera.supported && (
+            <button
+              type="button"
+              onClick={cameraOn ? camera.stopCamera : camera.startCamera}
+              disabled={camera.state === "starting"}
+              className="flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-xs text-muted transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+            >
+              {cameraOn ? <VideoOff size={14} /> : <Video size={14} />}
+              {camera.state === "starting"
+                ? "Starting"
+                : cameraOn
+                  ? "Camera off"
+                  : "Camera"}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-xs text-muted transition-colors hover:border-accent hover:text-accent"
+          >
+            {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
+            {isFullscreen ? "Exit full screen" : "Full screen"}
+          </button>
+
+          {cameraOn && (
+            <button
+              type="button"
+              onClick={() => {
+                if (camera.recording) {
+                  camera.stopRecording();
+                  setPlaying(false);
+                } else {
+                  // Rewind to the top so the take starts at the hook, and
+                  // start the scroll with it: pressing record and then
+                  // having to press play is how you get three seconds of
+                  // silence at the front of every clip.
+                  scrollPosRef.current = 0;
+                  if (containerRef.current) containerRef.current.scrollTop = 0;
+                  lastTimeRef.current = null;
+                  camera.startRecording();
+                  setPlaying(true);
+                }
+              }}
+              className={`flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-medium ${
+                camera.recording
+                  ? "bg-red-500 text-white"
+                  : "border border-red-500/50 text-red-400 hover:bg-red-500/10"
+              }`}
+            >
+              {camera.recording ? <Square size={13} /> : <Circle size={13} />}
+              {camera.recording ? "Stop and save" : "Record"}
+            </button>
+          )}
 
           <button
             type="button"
