@@ -7,15 +7,30 @@ import {
 import { getProfileHeader } from "@/lib/queries";
 import GamePlanForm from "@/components/game-plan/GamePlanForm";
 import Progress from "@/components/game-plan/Progress";
+import SetupNotice from "@/components/SetupNotice";
+import { safeLoad } from "@/lib/db-errors";
 
 export const dynamic = "force-dynamic";
 
 export default async function GamePlanPage() {
-  const profile = await getProfileHeader();
-  const [plan, postedThisWeek] = await Promise.all([
-    getGamePlan(),
-    getPostsThisWeek(profile.handle),
-  ]);
+  const [profile] = await safeLoad(
+    () => getProfileHeader(),
+    {
+      handle: null,
+      display_name: null,
+      bio: null,
+      followers_count: 0,
+      total_likes: 0,
+      video_count: 0,
+    },
+    "game-plan",
+  );
+  const [plan, planError] = await safeLoad(() => getGamePlan(), null, "game-plan");
+  const [postedThisWeek] = await safeLoad(
+    () => getPostsThisWeek(profile.handle),
+    0,
+    "game-plan",
+  );
 
   const week =
     plan?.postsPerWeek != null
@@ -44,9 +59,11 @@ export default async function GamePlanPage() {
         </p>
       </div>
 
-      <Progress week={week} goal={goal} />
+      {planError && <SetupNotice message={planError} />}
 
-      <GamePlanForm
+      {!planError && <Progress week={week} goal={goal} />}
+
+      {!planError && <GamePlanForm
         postsPerWeek={plan?.postsPerWeek ?? null}
         followerGoal={plan?.followerGoal ?? null}
         followerGoalDate={
@@ -55,7 +72,7 @@ export default async function GamePlanPage() {
             : null
         }
         currentFollowers={profile.followers_count}
-      />
+      />}
     </div>
   );
 }

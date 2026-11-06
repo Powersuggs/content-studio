@@ -1,12 +1,16 @@
+import SetupNotice from "@/components/SetupNotice";
+import { safeLoad } from "@/lib/db-errors";
 import { getRecentInsights } from "@/lib/queries";
 import InsightCards from "@/components/dashboard/InsightCards";
 import RegenerateButton from "@/components/patterns/RegenerateButton";
 
 export default async function PatternsPage() {
-  const insights = await getRecentInsights();
+  const [insights, setupError] = await safeLoad(() => getRecentInsights(), [], "patterns");
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
+      {setupError && <SetupNotice message={setupError} />}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-text">Pattern Reader</h1>

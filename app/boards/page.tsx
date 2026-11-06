@@ -1,10 +1,12 @@
+import SetupNotice from "@/components/SetupNotice";
+import { safeLoad } from "@/lib/db-errors";
 import Link from "next/link";
 import { Layers } from "lucide-react";
 import { getBoardsList } from "@/lib/queries";
 import NewBoardForm from "@/components/boards/NewBoardForm";
 
 export default async function BoardsPage() {
-  const boards = await getBoardsList();
+  const [boards, setupError] = await safeLoad(() => getBoardsList(), [], "boards");
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-8">
@@ -12,6 +14,8 @@ export default async function BoardsPage() {
         <h1 className="text-lg font-semibold text-text">Discover Boards</h1>
         <p className="mt-1 text-sm text-muted">Named collections of your posts.</p>
       </div>
+
+      {setupError && <SetupNotice message={setupError} />}
 
       <NewBoardForm />
 

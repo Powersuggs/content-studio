@@ -1,5 +1,6 @@
 import { Instagram, CheckCircle2, AlertTriangle, Link2 } from "lucide-react";
 import { getConnection } from "@/lib/ig/token-store";
+import { explainDbError } from "@/lib/db-errors";
 
 /**
  * The Instagram connection panel.
@@ -15,7 +16,29 @@ import { getConnection } from "@/lib/ig/token-store";
  *                      produce empty analytics
  */
 export default async function InstagramConnection() {
-  const connection = await getConnection().catch(() => null);
+  // Not caught blindly: a missing column here used to render as "not
+  // connected", which invites someone to reconnect an account that was
+  // never disconnected. A setup fault is reported as one; anything else
+  // is a real fault and should surface.
+  let connection: Awaited<ReturnType<typeof getConnection>> = null;
+  let setupError: string | null = null;
+  try {
+    connection = await getConnection();
+  } catch (err) {
+    setupError = explainDbError(err);
+    if (!setupError) throw err;
+  }
+
+  if (setupError) {
+    return (
+      <Panel>
+        <Header />
+        <p className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">
+          {setupError}
+        </p>
+      </Panel>
+    );
+  }
 
   if (!connection) {
     return (
