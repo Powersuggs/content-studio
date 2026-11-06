@@ -13,6 +13,7 @@ import {
   BookMarked,
   Fingerprint,
   Lightbulb,
+  Target,
 } from "lucide-react";
 
 export interface NavItem {
@@ -29,6 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/patterns", label: "Pattern Reader", icon: Sparkles },
   { href: "/scripts", label: "Script Writer", icon: PenLine },
   { href: "/hooks", label: "Hook Lab", icon: Zap },
+  { href: "/game-plan", label: "Game Plan", icon: Target },
   { href: "/session-prep", label: "Session Prep", icon: CalendarClock },
   { href: "/session-mode", label: "Session Mode", icon: Presentation },
   { href: "/boards", label: "Discover Boards", icon: Layers },

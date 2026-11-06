@@ -38,6 +38,7 @@ const SCOPED_TABLES = [
   "social_handles",
   "ideas",
   "idea_outputs",
+  "game_plan",
 ];
 
 /** Files whose job is to work across accounts, or before one exists. */
