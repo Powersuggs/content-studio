@@ -15,6 +15,10 @@ import {
   getSyncStatus,
 } from "@/lib/queries";
 import { getMyHandle } from "@/lib/my-handle";
+import PipelineStrip from "@/components/dashboard/PipelineStrip";
+import { getPipelineSnapshot } from "@/lib/ideas/queries";
+import { FORMATS } from "@/lib/ideas/formats";
+import { safeLoad } from "@/lib/db-errors";
 import { DEFAULT_APP_TIMEZONE } from "@/lib/analytics-sql";
 
 export default async function DashboardPage() {
@@ -50,6 +54,15 @@ export default async function DashboardPage() {
       getPostingHeatmap(),
     ]);
 
+  // The pipeline is newer than the rest of this page, so a database that
+  // has not had 0016 run should cost the dashboard its pipeline strip, not
+  // the whole dashboard.
+  const [pipeline] = await safeLoad(
+    () => getPipelineSnapshot(FORMATS.length),
+    null,
+    "dashboard",
+  );
+
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-8">
       <div className="flex items-center justify-between gap-3">
@@ -62,6 +75,7 @@ export default async function DashboardPage() {
       </div>
       <ProfileHeader data={profile} />
       <RecentPostsRail posts={recentPosts} />
+      {pipeline && <PipelineStrip snap={pipeline} />}
       <InsightCards insights={insights} />
       <StatTiles stats={allTimeStats} />
       <AveragesRow averages={averages} />
