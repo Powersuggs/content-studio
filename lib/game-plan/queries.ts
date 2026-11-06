@@ -180,21 +180,3 @@ export function goalProgress(
   };
 }
 
-/** Of the ideas captured here, how many became something. */
-export async function getMadeVsPosted(): Promise<{ made: number; posted: number }> {
-  const accountId = await currentAccountId();
-  const row = await queryOne<{ made: string; posted: string }>(
-    `select
-       (select count(*) from idea_outputs o
-         where o.account_id = $1
-           and o.created_at >= now() - interval '30 days') as made,
-       (select count(*) from posts p
-         where p.account_id = $1
-           and p.posted_at >= now() - interval '30 days') as posted`,
-    [accountId],
-  );
-  return {
-    made: Number(row?.made ?? 0),
-    posted: Number(row?.posted ?? 0),
-  };
-}

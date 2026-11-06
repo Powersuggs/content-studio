@@ -169,3 +169,70 @@ export async function countIdeas(): Promise<{ total: number; untouched: number }
     untouched: Number(row?.untouched ?? 0),
   };
 }
+
+export interface PipelineSnapshot {
+  /** Formats ticked off as made here, last 30 days. */
+  made: number;
+  /** Posts that actually went out on Instagram, last 30 days. */
+  posted: number;
+  /** Ideas captured that have produced nothing at all. */
+  untouchedIdeas: number;
+  /** Formats still available across every active idea. */
+  formatsWaiting: number;
+}
+
+/**
+ * The gap between what gets planned here and what actually goes out.
+ *
+ * The two counts are deliberately NOT presented as a conversion rate.
+ * Nothing links an idea_output to the post it became -- plenty gets
+ * written straight into Instagram and never passes through this app -- so
+ * a percentage would be invented precision. Two honest numbers and the
+ * size of the backlog say more than a made-up ratio.
+ */
+export async function getPipelineSnapshot(
+  totalFormats: number,
+): Promise<PipelineSnapshot> {
+  const accountId = await currentAccountId();
+
+  const row = await queryOne<{
+    made: string;
+    posted: string;
+    untouched_ideas: string;
+    outputs_on_active: string;
+    active_ideas: string;
+  }>(
+    `select
+       (select count(*) from idea_outputs o
+         where o.account_id = $1
+           and o.created_at >= now() - interval '30 days') as made,
+       (select count(*) from posts p
+         where p.account_id = $1
+           and p.posted_at >= now() - interval '30 days') as posted,
+       (select count(*) from ideas i
+         where i.account_id = $1
+           and i.archived_at is null
+           and not exists (
+             select 1 from idea_outputs o
+              where o.idea_id = i.id and o.account_id = $1
+           )) as untouched_ideas,
+       (select count(*) from idea_outputs o
+          join ideas i on i.id = o.idea_id and i.account_id = $1
+         where o.account_id = $1
+           and i.archived_at is null) as outputs_on_active,
+       (select count(*) from ideas i
+         where i.account_id = $1 and i.archived_at is null) as active_ideas`,
+    [accountId],
+  );
+
+  const activeIdeas = Number(row?.active_ideas ?? 0);
+  const outputsOnActive = Number(row?.outputs_on_active ?? 0);
+
+  return {
+    made: Number(row?.made ?? 0),
+    posted: Number(row?.posted ?? 0),
+    untouchedIdeas: Number(row?.untouched_ideas ?? 0),
+    // Every active idea could still produce every format it has not yet.
+    formatsWaiting: Math.max(activeIdeas * totalFormats - outputsOnActive, 0),
+  };
+}
