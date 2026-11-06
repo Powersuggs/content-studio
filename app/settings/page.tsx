@@ -4,6 +4,8 @@ import DeleteLendingFactButton from "@/components/settings/DeleteLendingFactButt
 import InstagramConnection from "@/components/settings/InstagramConnection";
 import SocialHandles from "@/components/settings/SocialHandles";
 import InviteCodes from "@/components/settings/InviteCodes";
+import SetupNotice from "@/components/SetupNotice";
+import { safeLoad } from "@/lib/db-errors";
 import { listHandles } from "@/lib/social/handles";
 import { listInvites } from "@/lib/auth/invites";
 import { getSession } from "@/lib/auth/current-account";
@@ -55,12 +57,9 @@ export default async function SettingsPage({
     ig_error?: string;
   }>;
 }) {
-  const [facts, loanTypeSuggestions, socialHandles, params] = await Promise.all([
+  const [facts, loanTypeSuggestions, params] = await Promise.all([
     getLendingFacts(),
     getDistinctLoanTypes(),
-    // A brand new account has no handles and no table rows; an empty list is
-    // the normal first state, not an error.
-    listHandles().catch(() => []),
     searchParams,
   ]);
 
@@ -68,7 +67,15 @@ export default async function SettingsPage({
   // actions behind it re-check rather than trusting that.
   const session = await getSession();
   const isOwner = session?.accountId === OWNER_ACCOUNT_ID;
-  const invites = isOwner ? await listInvites().catch(() => []) : [];
+  const [socialHandles, handlesError] = await safeLoad(
+    () => listHandles(),
+    [] as Awaited<ReturnType<typeof listHandles>>,
+    "settings",
+  );
+  const [invites, invitesError] = isOwner
+    ? await safeLoad(() => listInvites(), [] as Awaited<ReturnType<typeof listInvites>>, "settings")
+    : [[] as Awaited<ReturnType<typeof listInvites>>, null as string | null];
+  const setupError = handlesError ?? invitesError;
 
   // Facts already come back grouped by loan type (see getLendingFacts'
   // ORDER BY), so just bucket them here for rendering as sections
@@ -92,6 +99,8 @@ export default async function SettingsPage({
           loan type with nothing entered yet) rather than guess at it.
         </p>
       </div>
+
+      {setupError && <SetupNotice message={setupError} />}
 
       <ConnectionBanner
         ok={params.ig_ok}

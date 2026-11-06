@@ -26,12 +26,28 @@ export async function getMyHandle(): Promise<string | null> {
  * Prefer this in stat/dashboard queries so a missing profile fails loudly
  * instead of silently returning cross-creator data.
  */
-export async function requireMyHandle(): Promise<string> {
-  const handle = await getMyHandle();
-  if (!handle) {
-    throw new Error(
+/**
+ * Marker on the "no handle yet" error.
+ *
+ * Throwing here is right -- a stats query with no handle would otherwise
+ * return other creators' rows -- but it is a state the reader can fix, not
+ * a fault. Pages need to tell those apart, and matching on the message text
+ * would break the first time someone reworded it.
+ */
+export const NO_HANDLE = "NO_HANDLE";
+
+export class MissingHandleError extends Error {
+  readonly code = NO_HANDLE;
+  constructor() {
+    super(
       "No profile handle configured yet. Set your Instagram handle in the profile header before viewing stats.",
     );
+    this.name = "MissingHandleError";
   }
+}
+
+export async function requireMyHandle(): Promise<string> {
+  const handle = await getMyHandle();
+  if (!handle) throw new MissingHandleError();
   return handle;
 }

@@ -1,10 +1,12 @@
+import SetupNotice from "@/components/SetupNotice";
+import { safeLoad } from "@/lib/db-errors";
 import { getReferencePostsGroupedByHandle } from "@/lib/queries";
 import AddReferenceForm from "@/components/inspiration/AddReferenceForm";
 import BulkImportForm from "@/components/inspiration/BulkImportForm";
 import DeleteReferenceButton from "@/components/inspiration/DeleteReferenceButton";
 
 export default async function InspirationPage() {
-  const grouped = await getReferencePostsGroupedByHandle();
+  const [grouped, setupError] = await safeLoad(() => getReferencePostsGroupedByHandle(), {}, "inspiration");
   const handles = Object.keys(grouped);
 
   return (
@@ -15,6 +17,8 @@ export default async function InspirationPage() {
           Reference posts imported from other creators -- kept separate from your own stats.
         </p>
       </div>
+
+      {setupError && <SetupNotice message={setupError} />}
 
       <AddReferenceForm />
       <BulkImportForm />

@@ -1,8 +1,10 @@
+import SetupNotice from "@/components/SetupNotice";
+import { safeLoad } from "@/lib/db-errors";
 import Link from "next/link";
 import { getAllMyPostsHistory } from "@/lib/queries";
 
 export default async function HistoryPage() {
-  const posts = await getAllMyPostsHistory();
+  const [posts, setupError] = await safeLoad(() => getAllMyPostsHistory(), [], "history");
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-8">
@@ -10,6 +12,8 @@ export default async function HistoryPage() {
         <h1 className="text-lg font-semibold text-text">History</h1>
         <p className="mt-1 text-sm text-muted">Every one of your posts, newest first.</p>
       </div>
+
+      {setupError && <SetupNotice message={setupError} />}
 
       {posts.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-6 text-sm text-faint">
