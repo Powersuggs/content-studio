@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { PenLine, ListPlus, Check } from "lucide-react";
+import MicButton from "@/components/voice/MicButton";
 import { queueScriptAction } from "@/app/scripts/actions";
 
 interface ScriptResult {
@@ -70,6 +71,7 @@ export default function ScriptWriterForm({
           placeholder="What's the video about?"
           className="flex-1 rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
         />
+        <MicButton value={topic} onChange={setTopic} onError={setError} />
         <button
           type="button"
           onClick={generate}

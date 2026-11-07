@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { generateJson } from "@/lib/ai/generate-json";
 import { SIGNAL_READING_GUIDE, JSON_ONLY_INSTRUCTION } from "@/lib/ai/signals";
-import { getLendingFactsGuardrail } from "@/lib/queries";
+import { getVerifiedFactsGuardrail } from "@/lib/queries";
+import { explainDbError } from "@/lib/db-errors";
 
 interface BreakdownResponse {
   hook: string;
@@ -72,7 +73,7 @@ Transcript:
 ${transcript || "(not provided -- infer what you reasonably can from the caption alone, and note in why_it_works that this is inferred, not transcribed)"}
 `.trim();
 
-    const guardrail = await getLendingFactsGuardrail();
+    const guardrail = await getVerifiedFactsGuardrail();
     const result = await generateJson<BreakdownResponse>({
       system: `${BASE_SYSTEM_PROMPT}\n\n${guardrail}`,
       user: userPrompt,
@@ -87,6 +88,14 @@ ${transcript || "(not provided -- infer what you reasonably can from the caption
 
     return NextResponse.json(result);
   } catch (err) {
+    // A setup problem (a table or column the database does not have yet)
+    // is not the same as a generation failure, and saying "Unknown error"
+    // for one sends the person looking in the wrong place. explainDbError
+    // returns a sentence naming the migration to run; anything it does not
+    // recognise is a real fault and reported as before.
+    console.error("[reverse-engineer]", err);
+    const setup = explainDbError(err);
+    if (setup) return NextResponse.json({ error: setup }, { status: 503 });
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

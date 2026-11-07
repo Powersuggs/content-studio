@@ -1,6 +1,6 @@
-import { getLendingFacts, getDistinctLoanTypes } from "@/lib/queries";
-import AddLendingFactForm from "@/components/settings/AddLendingFactForm";
-import DeleteLendingFactButton from "@/components/settings/DeleteLendingFactButton";
+import { getVerifiedFacts, getDistinctFactTopics } from "@/lib/queries";
+import AddFactForm from "@/components/settings/AddFactForm";
+import DeleteFactButton from "@/components/settings/DeleteFactButton";
 import InstagramConnection from "@/components/settings/InstagramConnection";
 import SocialHandles from "@/components/settings/SocialHandles";
 import InviteCodes from "@/components/settings/InviteCodes";
@@ -57,11 +57,22 @@ export default async function SettingsPage({
     ig_error?: string;
   }>;
 }) {
-  const [facts, loanTypeSuggestions, params] = await Promise.all([
-    getLendingFacts(),
-    getDistinctLoanTypes(),
-    searchParams,
-  ]);
+  const params = await searchParams;
+
+  // Wrapped, not bare. These two were the last unguarded reads on this page:
+  // a missing table or column here took the whole of Sources & Facts down
+  // with an "Application error" instead of a sentence naming the migration
+  // to run, which is the one page you would go to in order to fix it.
+  const [facts, factsError] = await safeLoad(
+    () => getVerifiedFacts(),
+    [] as Awaited<ReturnType<typeof getVerifiedFacts>>,
+    "settings",
+  );
+  const [topicSuggestions] = await safeLoad(
+    () => getDistinctFactTopics(),
+    [] as string[],
+    "settings",
+  );
 
   // Invites are the owner's to issue. A member never sees the panel, and the
   // actions behind it re-check rather than trusting that.
@@ -75,14 +86,14 @@ export default async function SettingsPage({
   const [invites, invitesError] = isOwner
     ? await safeLoad(() => listInvites(), [] as Awaited<ReturnType<typeof listInvites>>, "settings")
     : [[] as Awaited<ReturnType<typeof listInvites>>, null as string | null];
-  const setupError = handlesError ?? invitesError;
+  const setupError = factsError ?? handlesError ?? invitesError;
 
-  // Facts already come back grouped by loan type (see getLendingFacts'
+  // Facts already come back grouped by topic (see getVerifiedFacts'
   // ORDER BY), so just bucket them here for rendering as sections
   // instead of one flat list.
   const grouped = new Map<string, typeof facts>();
   for (const f of facts) {
-    const key = f.loan_type?.trim() || "General / unspecified";
+    const key = f.topic?.trim() || "General / no topic";
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key)!.push(f);
   }
@@ -92,11 +103,11 @@ export default async function SettingsPage({
       <div>
         <h1 className="text-lg font-semibold text-text">Sources & Facts</h1>
         <p className="mt-1 text-sm text-muted">
-          This is the one place in the app for verified lending facts and where they came from.
-          Hook Lab, Script Writer, and the Inspiration breakdown tool all read this list before
-          writing anything -- they treat what&rsquo;s here as ground truth, and are told to write
-          around any specific number or rule that isn&rsquo;t covered here (including for a whole
-          loan type with nothing entered yet) rather than guess at it.
+          This is the one place in the app for verified facts and where they came from, grouped
+          by topic. Hook Lab, Script Writer, Newsletter and the Inspiration breakdown tool all
+          read this list before writing anything. They treat what is here as ground truth, and
+          are told to write around any specific not covered here, including for a whole topic
+          with nothing entered yet, rather than guess at it.
         </p>
       </div>
 
@@ -115,7 +126,7 @@ export default async function SettingsPage({
 
       {isOwner && <InviteCodes initial={invites} />}
 
-      <AddLendingFactForm loanTypeSuggestions={loanTypeSuggestions} />
+      {!factsError && <AddFactForm topicSuggestions={topicSuggestions} />}
 
       <div>
         <h2 className="mb-3 text-sm font-semibold text-text">
@@ -123,8 +134,9 @@ export default async function SettingsPage({
         </h2>
         {facts.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-6 text-sm text-faint">
-            No verified facts yet. Add your first one above -- start with the seller-concession
-            rule you already double-checked.
+            No verified facts yet. Add your first one above. Good ones to start with are the
+            numbers you already say out loud: licensing hours and cost, your brokerage&rsquo;s
+            split and cap, what the team actually provides.
           </div>
         ) : (
           <div className="space-y-6">
@@ -159,7 +171,7 @@ export default async function SettingsPage({
                             "No source noted"
                           )}
                         </p>
-                        <DeleteLendingFactButton id={f.id} />
+                        <DeleteFactButton id={f.id} />
                       </div>
                     </li>
                   ))}

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { generateJson } from "@/lib/ai/generate-json";
 import { SIGNAL_READING_GUIDE, JSON_ONLY_INSTRUCTION } from "@/lib/ai/signals";
-import { getLendingFactsGuardrail } from "@/lib/queries";
+import { getVerifiedFactsGuardrail } from "@/lib/queries";
+import { explainDbError } from "@/lib/db-errors";
 
 const ARCHETYPES = [
   "identity anchor",
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "topic is required" }, { status: 400 });
     }
 
-    const guardrail = await getLendingFactsGuardrail();
+    const guardrail = await getVerifiedFactsGuardrail();
     const result = await generateJson<HooksResponse>({
       system: `${BASE_SYSTEM_PROMPT}\n\n${guardrail}`,
       user: `Topic: ${topic}`,
@@ -97,6 +98,14 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ hooks });
   } catch (err) {
+    // A setup problem (a table or column the database does not have yet)
+    // is not the same as a generation failure, and saying "Unknown error"
+    // for one sends the person looking in the wrong place. explainDbError
+    // returns a sentence naming the migration to run; anything it does not
+    // recognise is a real fault and reported as before.
+    console.error("[hooks]", err);
+    const setup = explainDbError(err);
+    if (setup) return NextResponse.json({ error: setup }, { status: 503 });
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -46,6 +46,13 @@ export const MIGRATION_FOR_TABLE: Record<string, string> = {
   voice_profile: "0012_voice_profile.sql",
 };
 
+/**
+ * The newest migration file. Named in the missing-column message, since
+ * that is the one almost certainly not yet run. Asserted against the
+ * migrations directory by scripts/check-migration-map.mjs.
+ */
+export const LATEST_MIGRATION = "0019_fact_topics.sql";
+
 /** Thrown by requireMyHandle when no Instagram handle is set yet. */
 const NO_HANDLE = "NO_HANDLE";
 
@@ -98,7 +105,13 @@ export function explainDbError(err: unknown): string | null {
   }
 
   if (codeOf(err) === UNDEFINED_COLUMN) {
-    return "The database is missing a column this page needs, which usually means a migration was only partly applied. Re-run the most recent migration, then reload.";
+    // Naming the newest migration rather than saying "the most recent one"
+    // because the person reading this is standing in front of a broken page
+    // and should not have to go and work out which file that is. A column
+    // the code wants but the database lacks is almost always the newest
+    // migration not having been run yet; check-migration-map.mjs keeps this
+    // constant honest.
+    return `The database is missing a column this page needs, which almost always means the newest migration has not been run yet. Run migrations/${LATEST_MIGRATION} against it, then reload.`;
   }
 
   return null;
