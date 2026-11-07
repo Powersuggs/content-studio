@@ -35,6 +35,7 @@ export const MIGRATION_FOR_TABLE: Record<string, string> = {
   insights: "0001_init.sql",
   invite_codes: "0015_invite_codes.sql",
   lending_facts: "0007_lending_facts.sql",
+  newsletters: "0018_newsletters.sql",
   posts: "0001_init.sql",
   profile: "0001_init.sql",
   remakes: "0001_init.sql",
