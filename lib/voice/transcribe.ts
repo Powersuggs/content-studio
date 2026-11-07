@@ -54,7 +54,7 @@ export async function transcribeAudio(
   // general business and property, since the people using this are not all in
   // the same trade, and the account's own saved terms are appended so a
   // specialist's vocabulary gets primed too.
-  form.append("prompt", await buildVocabularyPrompt());
+  form.append("prompt", await vocabularyPrompt());
 
   const res = await fetch(GROQ_URL, {
     method: "POST",
@@ -64,13 +64,26 @@ export async function transcribeAudio(
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
+    // The detail is a JSON envelope. It belongs in the log, where it is
+    // useful, not pasted under a text box, where it is frightening and
+    // tells the person nothing they can act on.
+    console.error(`[voice/transcribe] Groq ${res.status}:`, detail.slice(0, 500));
+
     if (res.status === 401) {
       throw new Error("Groq rejected the API key. Check GROQ_API_KEY is correct.");
     }
     if (res.status === 429) {
-      throw new Error("Groq is rate limiting us. Wait a moment and try again.");
+      throw new Error("Too many recordings at once. Wait a moment and try again.");
     }
-    throw new Error(`Transcription failed (${res.status}). ${detail.slice(0, 200)}`);
+    if (res.status === 413) {
+      throw new Error("That recording was too long. Try again in shorter pieces.");
+    }
+    if (res.status === 400) {
+      throw new Error(
+        "The transcriber refused that recording. Try again, and if it keeps happening, type it instead.",
+      );
+    }
+    throw new Error("Could not write that down just now. Try again, or type it instead.");
   }
 
   const data = (await res.json()) as { text?: string };
@@ -86,40 +99,110 @@ export async function transcribeAudio(
 }
 
 /**
- * The vocabulary hint sent to the transcriber.
- *
- * Generic enough to help any small business owner, then extended with
- * whatever terms this particular account has saved, so a lender gets lending-specific
- * words and an agent gets property words without either being hardcoded.
+ * Groq's hard ceiling on the vocabulary hint. Sending one character more
+ * is rejected outright with invalid_prompt, which fails the whole
+ * transcription, so this is a limit to build under rather than discover.
  */
-async function buildVocabularyPrompt(): Promise<string> {
-  const base =
-    "A business owner talking about their work and their customers. " +
-    "Terms that may appear: ROI, SEO, CRM, LLC, invoice, retainer, referral, " +
-    "escrow, appraisal, listing, closing, commission, contingency, pre-approval, " +
-    "underwriting, Realtor, MLS, HOA, APR, FHA, VA, USDA, DSCR, DTI, LTV, PMI, NMLS, " +
-    // Brokerage and recruiting vocabulary. A transcriber with no hint renders
-    // "eXp" as "expe", "ICA" as "I see A" and "cap" as "capped", and those
-    // words carry the meaning in a recruiting script.
-    "eXp, eXp Realty, brokerage, broker, sponsor, downline, revenue share, " +
-    "commission split, cap, capping, transaction fee, desk fee, ICA, " +
-    "pre-licensing, post-licensing, continuing education, CE, licensure, " +
-    "salesperson license, designated broker, team lead, production, GCI, " +
-    "buyer representation agreement, listing agreement, referral fee.";
+export const MAX_VOCAB_PROMPT_CHARS = 896;
+
+/**
+ * The generic half of the hint: words any small business owner in property
+ * or lending is likely to say. Kept deliberately short, because the other
+ * half is the account's own vocabulary and that is the more valuable of the
+ * two. Those are the words a general transcriber has never seen.
+ *
+ * "eXp" is heard as "expe" and "ICA" as "I see A" without a hint, and those
+ * words carry the meaning in a recruiting script.
+ */
+const BASE_VOCAB =
+  "A business owner talking about property, lending and recruiting. " +
+  "Terms that may appear: ROI, SEO, CRM, LLC, referral, escrow, appraisal, " +
+  "listing, closing, commission, contingency, pre-approval, underwriting, " +
+  "Realtor, MLS, HOA, APR, FHA, VA, USDA, DSCR, DTI, LTV, PMI, NMLS, eXp, " +
+  "eXp Realty, brokerage, broker, sponsor, revenue share, commission split, " +
+  "cap, transaction fee, ICA, pre-licensing, licensure, designated broker, " +
+  "GCI, listing agreement.";
+
+/**
+ * Assemble the hint, never exceeding the ceiling.
+ *
+ * Terms are added one at a time while they fit rather than sliced to a
+ * fixed count. A fixed count was the bug: forty terms is a different
+ * number of characters for every account, and an account with a full facts
+ * library silently pushed the hint past the limit, which failed every
+ * transcription in the app rather than merely hinting less well.
+ *
+ * Pure and exported so its length can be asserted in a test without a
+ * database or a network call.
+ */
+export function buildVocabularyPrompt(accountTerms: string[]): string {
+  const prefix = " Also: ";
+  let out = BASE_VOCAB;
+  const added: string[] = [];
+
+  for (const term of accountTerms) {
+    const candidate = `${BASE_VOCAB}${prefix}${[...added, term].join(", ")}.`;
+    if (candidate.length > MAX_VOCAB_PROMPT_CHARS) break;
+    added.push(term);
+  }
+
+  if (added.length) out = `${BASE_VOCAB}${prefix}${added.join(", ")}.`;
+
+  // Belt and braces. BASE_VOCAB alone is well under the ceiling today, but
+  // a future edit to it should degrade the hint rather than break every
+  // recording in the app.
+  return out.length > MAX_VOCAB_PROMPT_CHARS
+    ? out.slice(0, MAX_VOCAB_PROMPT_CHARS)
+    : out;
+}
+
+/**
+ * Words that start a sentence rather than name anything.
+ *
+ * The extraction below takes capitalised words, which catches every
+ * acronym and proper noun worth hinting, and also catches "The", "On" and
+ * "No" at the start of a sentence. Those cost characters out of a budget
+ * that is already tight and teach the transcriber nothing: it has never
+ * struggled with the word "the".
+ */
+const SENTENCE_STARTERS = new Set(
+  (
+    "a an and are all any as at be because been before both but by can could did do does " +
+    "each every for from had has have how if in into is it its just keep like make may " +
+    "more most must need never new no not now of on once one only or other our out over " +
+    "per put same see should since so some than that the their them then there these " +
+    "they this those to up use very was we were what when where which while who will " +
+    "with would you your"
+  ).split(" "),
+);
+
+/**
+ * The account's own words, most likely to be misheard first.
+ *
+ * Capitalised words and acronyms out of their saved facts are exactly what
+ * a general transcriber gets wrong, and they are specific to the trade this
+ * person is actually in. Ordinary words that merely happened to start a
+ * sentence are dropped, so the limited room goes to terms that earn it.
+ */
+export function extractAccountTerms(
+  facts: { fact: string; topic: string | null }[],
+): string[] {
+  return Array.from(
+    new Set(
+      facts
+        .flatMap(
+          (f) => `${f.fact} ${f.topic ?? ""}`.match(/\b[A-Z][A-Za-z0-9-]{1,}\b/g) ?? [],
+        )
+        .filter((t) => t.length > 1 && !SENTENCE_STARTERS.has(t.toLowerCase())),
+    ),
+  );
+}
+
+async function vocabularyPrompt(): Promise<string> {
   try {
-    const facts = await getVerifiedFacts();
-    // Capitalised words and acronyms from their own saved facts are exactly
-    // the words a general transcriber is most likely to get wrong.
-    const terms = Array.from(
-      new Set(
-        facts
-          .flatMap((f) => `${f.fact} ${f.topic ?? ""}`.match(/\b[A-Z][A-Za-z0-9-]{1,}\b/g) ?? [])
-          .filter((t) => t.length > 1),
-      ),
-    ).slice(0, 40);
-    return terms.length ? `${base} Also: ${terms.join(", ")}.` : base;
+    return buildVocabularyPrompt(extractAccountTerms(await getVerifiedFacts()));
   } catch {
-    return base;
+    return BASE_VOCAB;
   }
 }
 
