@@ -92,7 +92,7 @@ async function makeAccount(label) {
     [id, postId, `${marker}insight`, handle],
   );
   await db.query(
-    `insert into lending_facts (account_id, fact, source_name, loan_type)
+    `insert into lending_facts (account_id, fact, source_name, topic)
      values ($1, $2, 'src', 'VA')`,
     [id, `${marker}fact`],
   );

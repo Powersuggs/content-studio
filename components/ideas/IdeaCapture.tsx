@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Lightbulb, Check } from "lucide-react";
 import { createIdeaAction } from "@/app/ideas/actions";
+import MicButton from "@/components/voice/MicButton";
 
 /**
  * Catching an idea.
@@ -11,12 +12,18 @@ import { createIdeaAction } from "@/app/ideas/actions";
  * to record is an idea you do not record, and the whole point of the
  * pipeline is to catch the half-formed ones before they evaporate. The
  * detail can be added later, or never.
+ *
+ * Which is also why the microphone is here. Typing is the slowest way to
+ * catch a thought, and an idea said out loud lands in the box in the words
+ * it was actually thought in, which is the voice everything downstream is
+ * trying to reproduce.
  */
 export default function IdeaCapture() {
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
   const [showNote, setShowNote] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const canSave = title.trim().length > 0;
@@ -53,6 +60,7 @@ export default function IdeaCapture() {
           placeholder="Say it the way you'd say it out loud"
           className="min-w-0 flex-1 rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none placeholder:text-faint focus:border-accent"
         />
+        <MicButton value={title} onChange={setTitle} onError={setVoiceError} />
         <button
           type="button"
           onClick={save}
@@ -71,14 +79,25 @@ export default function IdeaCapture() {
         </button>
       </div>
 
+      {voiceError && <p className="text-xs text-warn">{voiceError}</p>}
+
       {showNote ? (
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={3}
-          placeholder="The angle, who it's for, what set you off. Optional."
-          className="w-full rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none placeholder:text-faint focus:border-accent"
-        />
+        <div className="space-y-2">
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            placeholder="The angle, who it's for, what set you off. Optional."
+            className="w-full rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none placeholder:text-faint focus:border-accent"
+          />
+          <MicButton
+            value={note}
+            onChange={setNote}
+            onError={setVoiceError}
+            label="Speak the note"
+            size="sm"
+          />
+        </div>
       ) : (
         <button
           type="button"

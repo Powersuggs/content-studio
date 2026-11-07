@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { generateJson } from "@/lib/ai/generate-json";
 import { JSON_ONLY_INSTRUCTION } from "@/lib/ai/signals";
-import { getLendingFactsGuardrail } from "@/lib/queries";
+import { getVerifiedFactsGuardrail } from "@/lib/queries";
 import { saveNewsletter } from "@/lib/newsletter/queries";
+import { explainDbError } from "@/lib/db-errors";
 
 interface NewsletterResponse {
   subject: string;
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
     // Same guardrail the script writer uses: regulated claims get written
     // around rather than invented, which matters more in an email that
     // sits in an inbox than in a video that scrolls past.
-    const guardrail = await getLendingFactsGuardrail();
+    const guardrail = await getVerifiedFactsGuardrail();
 
     const result = await generateJson<NewsletterResponse>({
       system: `${SYSTEM_PROMPT}\n\n${guardrail}`,
@@ -98,6 +99,10 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("[newsletter]", err);
+    // "Try again" is wrong advice when the database is missing a column:
+    // trying again will fail identically. Say what to actually do.
+    const setup = explainDbError(err);
+    if (setup) return NextResponse.json({ error: setup }, { status: 503 });
     return NextResponse.json(
       { error: "Could not write the email. Try again." },
       { status: 500 },

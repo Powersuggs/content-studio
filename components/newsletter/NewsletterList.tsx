@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Copy, Check, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import MicButton from "@/components/voice/MicButton";
 import {
   saveNewsletterEditAction,
   setNewsletterStatusAction,
@@ -51,6 +52,7 @@ function Row({ item }: { item: NewsletterItem }) {
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const dirty = subject !== item.subject || body !== item.body;
@@ -162,17 +164,35 @@ function Row({ item }: { item: NewsletterItem }) {
             </div>
           )}
 
-          <label className="block space-y-1.5">
-            <span className="text-xs uppercase tracking-wide text-faint">
-              Body
-            </span>
+          {/* A div, not a label: a <button> inside a <label> is invalid and
+              the click would be forwarded to the textarea instead of
+              starting the recording. */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <label
+                htmlFor={`newsletter-body-${item.id}`}
+                className="text-xs uppercase tracking-wide text-faint"
+              >
+                Body
+              </label>
+              <MicButton
+                value={body}
+                onChange={setBody}
+                onError={setVoiceError}
+                label="Dictate"
+                size="sm"
+              />
+            </div>
             <textarea
+              id={`newsletter-body-${item.id}`}
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={12}
               className="w-full rounded-lg border border-border bg-panel-2 px-3 py-2 font-mono text-[13px] leading-relaxed text-text outline-none focus:border-accent"
             />
-          </label>
+          </div>
+
+          {voiceError && <p className="text-xs text-warn">{voiceError}</p>}
 
           <div className="flex flex-wrap items-center gap-2">
             {dirty ? (

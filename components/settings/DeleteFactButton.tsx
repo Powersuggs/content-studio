@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { Trash2, Check, X } from "lucide-react";
-import { deleteLendingFactAction } from "@/app/settings/actions";
+import { deleteVerifiedFactAction } from "@/app/settings/actions";
 
-export default function DeleteLendingFactButton({ id }: { id: number }) {
+export default function DeleteFactButton({ id }: { id: number }) {
   const [confirming, setConfirming] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -16,7 +16,7 @@ export default function DeleteLendingFactButton({ id }: { id: number }) {
           type="button"
           onClick={() =>
             startTransition(async () => {
-              await deleteLendingFactAction(id);
+              await deleteVerifiedFactAction(id);
             })
           }
           disabled={isPending}

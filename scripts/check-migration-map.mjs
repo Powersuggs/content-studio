@@ -49,6 +49,21 @@ for (const table of mapped.keys()) {
   }
 }
 
+// LATEST_MIGRATION is quoted at people staring at a broken page, telling
+// them which file to run. A stale value sends them to the wrong one, which
+// is worse than saying nothing, so it is checked like the table map is.
+const newest = files[files.length - 1];
+const declared = /LATEST_MIGRATION\s*=\s*"([^"]+)"/.exec(
+  readFileSync(join(ROOT, "lib", "db-errors.ts"), "utf8"),
+)?.[1];
+if (!declared) {
+  problems.push("  missing: LATEST_MIGRATION is not declared in lib/db-errors.ts");
+} else if (declared !== newest) {
+  problems.push(
+    `  stale:   LATEST_MIGRATION says ${declared} but the newest migration is ${newest}`,
+  );
+}
+
 if (problems.length) {
   console.error(`\nMigration map check FAILED: ${problems.length} problem(s).\n`);
   console.error(problems.join("\n"));
@@ -56,4 +71,6 @@ if (problems.length) {
   process.exit(1);
 }
 
-console.log(`\nMigration map check: all ${created.size} tables map to the migration that creates them.\n`);
+console.log(
+  `\nMigration map check: all ${created.size} tables map to the migration that creates them, and LATEST_MIGRATION is ${newest}.\n`,
+);

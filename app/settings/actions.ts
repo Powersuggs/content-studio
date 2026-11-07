@@ -1,29 +1,29 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { addLendingFact, deleteLendingFact } from "@/lib/queries";
+import { addVerifiedFact, deleteVerifiedFact } from "@/lib/queries";
 import { saveHandle } from "@/lib/social/handles";
 import { createInvite, revokeInvite } from "@/lib/auth/invites";
 import { getSession } from "@/lib/auth/current-account";
 import { OWNER_ACCOUNT_ID } from "@/lib/auth/session";
 
-export async function addLendingFactAction(input: {
+export async function addVerifiedFactAction(input: {
   fact: string;
-  loan_type: string;
+  topic: string;
   source_name: string;
   source_url: string;
 }) {
-  await addLendingFact({
+  await addVerifiedFact({
     fact: input.fact,
-    loan_type: input.loan_type || null,
+    topic: input.topic || null,
     source_name: input.source_name || null,
     source_url: input.source_url || null,
   });
   revalidatePath("/settings");
 }
 
-export async function deleteLendingFactAction(id: number) {
-  await deleteLendingFact(id);
+export async function deleteVerifiedFactAction(id: number) {
+  await deleteVerifiedFact(id);
   revalidatePath("/settings");
 }
 

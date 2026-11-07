@@ -2,39 +2,59 @@
 
 import { useState, useTransition } from "react";
 import { BookmarkPlus, Check } from "lucide-react";
-import { addLendingFactAction } from "@/app/settings/actions";
+import MicButton from "@/components/voice/MicButton";
+import { addVerifiedFactAction } from "@/app/settings/actions";
 
-const DEFAULT_LOAN_TYPES = ["Conventional", "FHA", "VA", "USDA", "Jumbo"];
+/**
+ * Topics offered before the person has typed any of their own.
+ *
+ * Ordered by what the content is actually about now: recruiting agents
+ * and winning transactions first, lending kept because the licence is
+ * still live. The box is free text, so this is a nudge rather than a
+ * list to pick from.
+ */
+const DEFAULT_TOPICS = [
+  "Agent recruiting",
+  "Brokerage / splits",
+  "Getting licensed",
+  "Buying a home",
+  "Selling a home",
+  "Local market",
+  "Conventional",
+  "FHA",
+  "VA",
+  "USDA",
+  "Jumbo",
+];
 
-export default function AddLendingFactForm({
-  loanTypeSuggestions = [],
+export default function AddFactForm({
+  topicSuggestions = [],
 }: {
-  loanTypeSuggestions?: string[];
+  topicSuggestions?: string[];
 }) {
   const [fact, setFact] = useState("");
-  const [loanType, setLoanType] = useState("");
+  const [topic, setTopic] = useState("");
   const [sourceName, setSourceName] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [saved, setSaved] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const suggestions = Array.from(
-    new Set([...DEFAULT_LOAN_TYPES, ...loanTypeSuggestions]),
-  );
+  const suggestions = Array.from(new Set([...DEFAULT_TOPICS, ...topicSuggestions]));
 
   const canSubmit = fact.trim().length > 0;
 
   function save() {
     if (!canSubmit) return;
     startTransition(async () => {
-      await addLendingFactAction({
+      await addVerifiedFactAction({
         fact: fact.trim(),
-        loan_type: loanType.trim(),
+        topic: topic.trim(),
         source_name: sourceName.trim(),
         source_url: sourceUrl.trim(),
       });
       setFact("");
-      setLoanType("");
+      setTopic("");
       setSourceName("");
       setSourceUrl("");
       setSaved(true);
@@ -46,22 +66,22 @@ export default function AddLendingFactForm({
     <div className="rounded-xl border border-border bg-panel p-5">
       <p className="text-sm font-medium text-text">Add a verified fact</p>
       <p className="mt-0.5 text-xs text-muted">
-        Paste one specific rule you&rsquo;ve confirmed is correct -- a cap, a percentage, a program
-        requirement -- along with where it came from. Every AI writing tool in the app will treat
-        this as ground truth instead of guessing.
+        Paste one specific thing you have confirmed is correct, a cost, a split, a cap, a
+        requirement, along with where it came from. Every AI writing tool in the app treats
+        what is here as ground truth, and is told to write around any specific that is not.
       </p>
 
       <div className="mt-4 space-y-3">
         <div>
-          <label className="text-xs text-faint">Loan type</label>
+          <label className="text-xs text-faint">Topic</label>
           <input
-            list="loan-type-suggestions"
-            value={loanType}
-            onChange={(e) => setLoanType(e.target.value)}
-            placeholder="e.g. VA, FHA, Conventional, USDA, Jumbo"
+            list="fact-topic-suggestions"
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            placeholder="e.g. Agent recruiting, Getting licensed, VA"
             className="mt-1 w-full rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
           />
-          <datalist id="loan-type-suggestions">
+          <datalist id="fact-topic-suggestions">
             {suggestions.map((s) => (
               <option key={s} value={s} />
             ))}
@@ -69,14 +89,24 @@ export default function AddLendingFactForm({
         </div>
 
         <div>
-          <label className="text-xs text-faint">Fact</label>
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-xs text-faint">Fact</label>
+            <MicButton
+              value={fact}
+              onChange={setFact}
+              onError={setVoiceError}
+              label="Read it out"
+              size="sm"
+            />
+          </div>
           <textarea
             value={fact}
             onChange={(e) => setFact(e.target.value)}
             rows={3}
-            placeholder='e.g. "On VA loans, seller-paid closing costs don&rsquo;t count toward the 4% seller concession cap, but the 4% cap itself still applies to other seller-paid items."'
+            placeholder="e.g. Arizona pre-licensing is 90 hours plus the 6-hour contract writing course, $650 one time, digital textbook included."
             className="mt-1 w-full resize-none rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
           />
+          {voiceError && <p className="mt-1 text-xs text-warn">{voiceError}</p>}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -85,7 +115,7 @@ export default function AddLendingFactForm({
             <input
               value={sourceName}
               onChange={(e) => setSourceName(e.target.value)}
-              placeholder="e.g. VA Lenders Handbook, UWM, your compliance team"
+              placeholder="e.g. your broker, the school's price page, VA Lenders Handbook"
               className="mt-1 w-full rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
             />
           </div>

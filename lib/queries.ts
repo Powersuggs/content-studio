@@ -97,63 +97,70 @@ export async function updateProfile(
 }
 
 // ---------------------------------------------------------------------
-// Lending facts library: a real "sources & research" location. Each
+// Verified facts library: a real "sources & research" location. Each
 // row is one verified fact plus where it came from (source name/URL),
 // entered by the creator (or copied from a source he trusts) so every
 // AI writing feature is grounded in researched, cited facts instead of
-// generating specifics (caps, percentages, program rules) from general
-// model knowledge.
+// generating specifics (splits, caps, percentages, program rules) from
+// general model knowledge.
+//
+// Facts are grouped by TOPIC, which is whatever the fact is about:
+// recruiting, a brokerage's commission structure, getting licensed, a
+// local market, or a loan program. The table is still named
+// lending_facts because this started as a lending-only app; the name
+// never reaches the screen and renaming it would churn the RLS policy,
+// the grants and four test scripts for nothing.
 // ---------------------------------------------------------------------
 
-export interface LendingFact {
+export interface VerifiedFact {
   id: number;
   fact: string;
-  loan_type: string | null;
+  topic: string | null;
   source_name: string | null;
   source_url: string | null;
   created_at: string;
 }
 
-export async function getLendingFacts(): Promise<LendingFact[]> {
-  return query<LendingFact>(
-    `select id, fact, loan_type, source_name, source_url, created_at
+export async function getVerifiedFacts(): Promise<VerifiedFact[]> {
+  return query<VerifiedFact>(
+    `select id, fact, topic, source_name, source_url, created_at
      from lending_facts
      where account_id = $1
-     order by coalesce(loan_type, 'zzz') asc, created_at desc`,
+     order by coalesce(topic, 'zzz') asc, created_at desc`,
     [await currentAccountId()],
   );
 }
 
-/** Distinct loan types already in use, for the "Loan type" autocomplete. */
-export async function getDistinctLoanTypes(): Promise<string[]> {
-  const rows = await query<{ loan_type: string }>(
-    `select distinct loan_type from lending_facts
-     where account_id = $1 and loan_type is not null and loan_type <> ''
-     order by loan_type asc`,
+/** Distinct topics already in use, for the "Topic" autocomplete. */
+export async function getDistinctFactTopics(): Promise<string[]> {
+  const rows = await query<{ topic: string }>(
+    `select distinct topic from lending_facts
+     where account_id = $1 and topic is not null and topic <> ''
+     order by topic asc`,
     [await currentAccountId()],
   );
-  return rows.map((r) => r.loan_type);
+  return rows.map((r) => r.topic);
 }
 
-export interface AddLendingFactInput {
+export interface AddVerifiedFactInput {
   fact: string;
-  loan_type?: string | null;
+  topic?: string | null;
   source_name?: string | null;
   source_url?: string | null;
 }
 
-export async function addLendingFact(
-  input: AddLendingFactInput,
-): Promise<LendingFact> {
+export async function addVerifiedFact(
+  input: AddVerifiedFactInput,
+): Promise<VerifiedFact> {
   const fact = input.fact.trim();
   if (!fact) throw new Error("fact is required");
-  const row = await queryOne<LendingFact>(
-    `insert into lending_facts (fact, loan_type, source_name, source_url, account_id)
+  const row = await queryOne<VerifiedFact>(
+    `insert into lending_facts (fact, topic, source_name, source_url, account_id)
      values ($1, $2, $3, $4, $5)
-     returning id, fact, loan_type, source_name, source_url, created_at`,
+     returning id, fact, topic, source_name, source_url, created_at`,
     [
       fact,
-      input.loan_type?.trim() || null,
+      input.topic?.trim() || null,
       input.source_name?.trim() || null,
       input.source_url?.trim() || null,
       await currentAccountId(),
@@ -163,7 +170,7 @@ export async function addLendingFact(
   return row;
 }
 
-export async function deleteLendingFact(id: number): Promise<void> {
+export async function deleteVerifiedFact(id: number): Promise<void> {
   const row = await queryOne<{ id: number }>(
     `delete from lending_facts where id = $1 and account_id = $2 returning id`,
     [id, await currentAccountId()],
@@ -172,46 +179,58 @@ export async function deleteLendingFact(id: number): Promise<void> {
 }
 
 /**
- * Shared instruction block for any AI route that might state specific
- * loan-program numbers, caps, or rules. Appended to those system
- * prompts so the model treats verified, sourced facts as ground truth
- * and writes around anything else instead of inventing a specific.
+ * Shared instruction block for any AI route that might state a specific
+ * number, split, cap, cost, or rule. Appended to those system prompts so
+ * the model treats verified, sourced facts as ground truth and writes
+ * around anything else instead of inventing a specific.
+ *
+ * Topic-general on purpose. This started as a lending guardrail, but the
+ * numbers that need protecting move with the content: a commission split
+ * or a licensing cost quoted at someone being recruited to spend money is
+ * every bit as consequential as an FHA rule quoted at a buyer.
  */
-export async function getLendingFactsGuardrail(): Promise<string> {
-  const facts = await getLendingFacts();
+export async function getVerifiedFactsGuardrail(): Promise<string> {
+  const facts = await getVerifiedFacts();
 
-  // Group by loan type so the model can tell at a glance which
-  // program a fact applies to, and so it's obvious which loan types
-  // have no verified facts entered yet (and should be written around).
-  const byType = new Map<string, LendingFact[]>();
+  // Group by topic so the model can tell at a glance what each fact
+  // applies to, and so it is obvious which topics have no verified facts
+  // entered yet (and should therefore be written around).
+  const byTopic = new Map<string, VerifiedFact[]>();
   for (const f of facts) {
-    const key = f.loan_type?.trim() || "General / unspecified loan type";
-    if (!byType.has(key)) byType.set(key, []);
-    byType.get(key)!.push(f);
+    const key = f.topic?.trim() || "General / no topic given";
+    if (!byTopic.has(key)) byTopic.set(key, []);
+    byTopic.get(key)!.push(f);
   }
-  const factLines = Array.from(byType.entries())
-    .map(([type, items]) => {
+  const factLines = Array.from(byTopic.entries())
+    .map(([topic, items]) => {
       const lines = items
         .map((f) => {
-          const source = f.source_name || f.source_url
-            ? ` (source: ${[f.source_name, f.source_url].filter(Boolean).join(" -- ")})`
-            : "";
+          const source =
+            f.source_name || f.source_url
+              ? ` (source: ${[f.source_name, f.source_url].filter(Boolean).join(" -- ")})`
+              : "";
           return `  - ${f.fact}${source}`;
         })
         .join("\n");
-      return `${type}:\n${lines}`;
+      return `${topic}:\n${lines}`;
     })
     .join("\n\n");
 
   return `
-LENDING FACTS GUARDRAIL:
+VERIFIED FACTS GUARDRAIL:
 ${
   facts.length > 0
-    ? `The creator has researched and verified the following facts about loan programs and lending rules, grouped by loan type and each tied to a source. Treat these as ground truth and never contradict them. A fact listed under one loan type (e.g. VA) applies ONLY to that loan type -- never carry a number or rule over to a different loan type (e.g. FHA, Conventional, USDA, Jumbo) just because it sounds similar. When a fact has a source, you may mention where it comes from in general terms (e.g. "per VA guidelines") but do not fabricate a citation beyond what's given:\n${factLines}`
-    : "The creator has not entered any verified, sourced lending facts yet."
+    ? `The creator has researched and verified the following facts, grouped by topic and each tied to a source. Treat these as ground truth and never contradict them. A fact listed under one topic applies ONLY to that topic -- never carry a number or rule across to a different topic because it sounds similar (one loan program's cap is not another's; one brokerage's split is not another's; one state's licensing requirement is not another's). When a fact has a source you may refer to where it came from in general terms, but do not fabricate a citation beyond what is given:\n${factLines}`
+    : "The creator has not entered any verified, sourced facts yet."
 }
 
-For any OTHER specific regulatory number, percentage, cap, program rule, or legal claim not covered by the facts above -- including for a loan type that has no facts listed at all -- do NOT state it as a specific fact -- do not guess or rely on general training knowledge for it. Write around it generally instead (e.g. "ask your loan officer about the exact seller-concession rules for your loan type" rather than inventing a percentage). This is a licensed lender's public content -- getting a specific wrong is a compliance risk, not just an error, so vague-but-correct always beats specific-but-guessed.
+For any OTHER specific number, percentage, split, cap, fee, cost, timeline, program rule, earnings figure, or legal or regulatory claim not covered above -- including for a topic with no facts listed at all -- do NOT state it. Do not guess, and do not fall back on general training knowledge for it. Write around it instead, and point the reader at the person or document that can confirm it.
+
+Two kinds of specific deserve extra care:
+- Regulated lending and real estate claims. This is a licensed professional's public content, so a wrong specific is a compliance problem, not just an error.
+- Income, earnings, commission split, and revenue share figures used while recruiting. Claims about what someone could earn are held to a higher standard than ordinary marketing, and a brokerage usually sets its own rules about what its agents may state publicly. Never generate one that is not in the verified facts above, and never imply a typical or expected income.
+
+Vague-but-correct always beats specific-but-guessed.
 `.trim();
 }
 

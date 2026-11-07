@@ -1,5 +1,5 @@
 import { getAnthropicClient, AI_MODEL, extractResponseText } from "@/lib/ai/client";
-import { getLendingFacts } from "@/lib/queries";
+import { getVerifiedFacts } from "@/lib/queries";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 const GROQ_MODEL = "whisper-large-v3-turbo";
@@ -21,7 +21,7 @@ export interface Transcription {
  * "discer", "escrow" as "ess crow". Left alone those errors end up inside
  * generated content with a licensed lender's name on it.
  *
- * So the transcript goes to Claude with the account's own lending facts as
+ * So the transcript goes to Claude with the account's own verified facts as
  * context, with one job: fix mishearings, change nothing else. It is told
  * explicitly not to improve the writing, because the whole point of a spoken
  * answer is how the person actually talks.
@@ -89,7 +89,7 @@ export async function transcribeAudio(
  * The vocabulary hint sent to the transcriber.
  *
  * Generic enough to help any small business owner, then extended with
- * whatever terms this particular account has saved, so a lender gets lending
+ * whatever terms this particular account has saved, so a lender gets lending-specific
  * words and an agent gets property words without either being hardcoded.
  */
 async function buildVocabularyPrompt(): Promise<string> {
@@ -97,15 +97,23 @@ async function buildVocabularyPrompt(): Promise<string> {
     "A business owner talking about their work and their customers. " +
     "Terms that may appear: ROI, SEO, CRM, LLC, invoice, retainer, referral, " +
     "escrow, appraisal, listing, closing, commission, contingency, pre-approval, " +
-    "underwriting, Realtor, MLS, HOA, APR, FHA, VA, USDA, DSCR, DTI, LTV, PMI, NMLS.";
+    "underwriting, Realtor, MLS, HOA, APR, FHA, VA, USDA, DSCR, DTI, LTV, PMI, NMLS, " +
+    // Brokerage and recruiting vocabulary. A transcriber with no hint renders
+    // "eXp" as "expe", "ICA" as "I see A" and "cap" as "capped", and those
+    // words carry the meaning in a recruiting script.
+    "eXp, eXp Realty, brokerage, broker, sponsor, downline, revenue share, " +
+    "commission split, cap, capping, transaction fee, desk fee, ICA, " +
+    "pre-licensing, post-licensing, continuing education, CE, licensure, " +
+    "salesperson license, designated broker, team lead, production, GCI, " +
+    "buyer representation agreement, listing agreement, referral fee.";
   try {
-    const facts = await getLendingFacts();
+    const facts = await getVerifiedFacts();
     // Capitalised words and acronyms from their own saved facts are exactly
     // the words a general transcriber is most likely to get wrong.
     const terms = Array.from(
       new Set(
         facts
-          .flatMap((f) => `${f.fact} ${f.loan_type ?? ""}`.match(/\b[A-Z][A-Za-z0-9-]{1,}\b/g) ?? [])
+          .flatMap((f) => `${f.fact} ${f.topic ?? ""}`.match(/\b[A-Z][A-Za-z0-9-]{1,}\b/g) ?? [])
           .filter((t) => t.length > 1),
       ),
     ).slice(0, 40);
@@ -125,11 +133,11 @@ async function buildVocabularyPrompt(): Promise<string> {
  */
 async function correctJargon(raw: string): Promise<string> {
   try {
-    const facts = await getLendingFacts().catch(() => []);
+    const facts = await getVerifiedFacts().catch(() => []);
     const factContext = facts.length
       ? `\n\nTerms and programs this person works with, for reference:\n${facts
           .slice(0, 40)
-          .map((f) => `- ${f.fact}${f.loan_type ? ` (${f.loan_type})` : ""}`)
+          .map((f) => `- ${f.fact}${f.topic ? ` (${f.topic})` : ""}`)
           .join("\n")}`
       : "";
 
@@ -140,8 +148,9 @@ async function correctJargon(raw: string): Promise<string> {
 
 Your ONLY job is to fix words the transcriber misheard. Typical cases:
 - Spelled-out acronyms that should be joined up: "S E O" -> SEO, "F H A" -> FHA, "R O I" -> ROI
-- Acronyms heard as words: "in Emma less" -> NMLS, "discer" -> DSCR, "em el es" -> MLS
+- Acronyms heard as words: "in Emma less" -> NMLS, "discer" -> DSCR, "em el es" -> MLS, "I see A" -> ICA
 - Industry words heard phonetically: "ess crow" -> escrow, "contingent see" -> contingency
+- Brokerage names and recruiting terms: "expe" / "ex pee" / "X P" -> eXp, "rev share" kept as-is, "G C I" -> GCI
 - Hyphenation of standard terms: "pre approval" -> pre-approval
 - Mangled company, product, program or place names
 
