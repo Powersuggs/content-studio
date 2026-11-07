@@ -1,8 +1,13 @@
-import { listIdeas, countIdeas, type IdeaFilter } from "@/lib/ideas/queries";
+import {
+  listIdeas,
+  countIdeas,
+  listDraftsForIdeas,
+  type IdeaFilter,
+} from "@/lib/ideas/queries";
 import IdeaCapture from "@/components/ideas/IdeaCapture";
 import SetupNotice from "@/components/SetupNotice";
 import { safeLoad } from "@/lib/db-errors";
-import IdeaList from "@/components/ideas/IdeaList";
+import IdeaList, { type DraftView } from "@/components/ideas/IdeaList";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +32,24 @@ export default async function IdeasPage({
     { total: 0, untouched: 0 },
     "ideas",
   );
+  // One query for every idea's drafts rather than one per idea. Wrapped
+  // because 0020 may not have been run yet, and a missing column here
+  // should cost the drafts, not the whole page.
+  const [draftMap] = await safeLoad(
+    () => listDraftsForIdeas(ideas.map((i) => i.id)),
+    new Map<number, Awaited<ReturnType<typeof listDraftsForIdeas>> extends Map<number, infer V> ? V : never>(),
+    "ideas",
+  );
+  const drafts: Record<number, DraftView[]> = {};
+  for (const [ideaId, list] of draftMap) {
+    drafts[ideaId] = list.map((d) => ({
+      format: d.format,
+      content: d.content,
+      scriptId: d.scriptId,
+      newsletterId: d.newsletterId,
+    }));
+  }
+
   const setupError = ideasError;
 
   return (
@@ -69,7 +92,12 @@ export default async function IdeasPage({
       )}
 
       {!setupError && (
-        <IdeaList ideas={ideas} emptyFilter={filter} hasAny={counts.total > 0} />
+        <IdeaList
+          ideas={ideas}
+          drafts={drafts}
+          emptyFilter={filter}
+          hasAny={counts.total > 0}
+        />
       )}
     </div>
   );
