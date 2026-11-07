@@ -1,6 +1,7 @@
 import { query, queryOne } from "@/lib/db";
 import { currentAccountId } from "@/lib/auth/current-account";
 import { FORMATS, isFormatId, type FormatId } from "./formats";
+import { normalize, type GeneratedOutput } from "./generate";
 
 /**
  * Reading and writing the idea pipeline.
@@ -235,4 +236,132 @@ export async function getPipelineSnapshot(
     // Every active idea could still produce every format it has not yet.
     formatsWaiting: Math.max(activeIdeas * totalFormats - outputsOnActive, 0),
   };
+}
+
+// ---------------------------------------------------------------------
+// Generated drafts. An output row used to be a tick meaning "I made this
+// somewhere else". It can now also hold the thing itself, written here.
+// ---------------------------------------------------------------------
+
+export interface OutputDraft {
+  format: FormatId;
+  content: GeneratedOutput | null;
+  generatedAt: Date | null;
+  scriptId: number | null;
+  newsletterId: number | null;
+}
+
+interface DraftRow {
+  format: string;
+  content: string | null;
+  generated_at: string | null;
+  script_id: string | null;
+  newsletter_id: string | null;
+}
+
+function toDraft(r: DraftRow): OutputDraft {
+  let content: GeneratedOutput | null = null;
+  if (r.content) {
+    try {
+      content = normalize(JSON.parse(r.content));
+    } catch {
+      // Hand-edited or written by an older shape. A draft that will not
+      // parse should show as a plain tick, not take the page down.
+      content = null;
+    }
+  }
+  return {
+    format: r.format as FormatId,
+    content,
+    generatedAt: r.generated_at ? new Date(r.generated_at) : null,
+    scriptId: r.script_id ? Number(r.script_id) : null,
+    newsletterId: r.newsletter_id ? Number(r.newsletter_id) : null,
+  };
+}
+
+/** Every stored draft for one idea, so the list can render them inline. */
+export async function listDrafts(ideaId: number): Promise<OutputDraft[]> {
+  const accountId = await currentAccountId();
+  const rows = await query<DraftRow>(
+    `select format, content, generated_at, script_id, newsletter_id
+       from idea_outputs
+      where account_id = $1 and idea_id = $2
+      order by created_at asc`,
+    [accountId, ideaId],
+  );
+  return rows.map(toDraft);
+}
+
+/** Drafts for several ideas at once, keyed by idea id. */
+export async function listDraftsForIdeas(
+  ideaIds: number[],
+): Promise<Map<number, OutputDraft[]>> {
+  const out = new Map<number, OutputDraft[]>();
+  if (ideaIds.length === 0) return out;
+  const accountId = await currentAccountId();
+  // One query rather than one per idea: a pipeline of fifty ideas would
+  // otherwise be fifty round trips to render a list.
+  const rows = await query<DraftRow & { idea_id: string }>(
+    `select idea_id, format, content, generated_at, script_id, newsletter_id
+       from idea_outputs
+      where account_id = $1 and idea_id = any($2::bigint[])
+      order by created_at asc`,
+    [accountId, ideaIds],
+  );
+  for (const r of rows) {
+    const id = Number(r.idea_id);
+    if (!out.has(id)) out.set(id, []);
+    out.get(id)!.push(toDraft(r));
+  }
+  return out;
+}
+
+/** The idea itself, for generating from. Scoped, so it cannot read another account's. */
+export async function getIdeaForGeneration(
+  ideaId: number,
+): Promise<{ id: number; title: string; note: string | null } | null> {
+  const accountId = await currentAccountId();
+  const row = await queryOne<{ id: string; title: string; note: string | null }>(
+    `select id, title, note from ideas where id = $1 and account_id = $2`,
+    [ideaId, accountId],
+  );
+  return row ? { id: Number(row.id), title: row.title, note: row.note } : null;
+}
+
+/**
+ * Stores a generated draft against its idea and format.
+ *
+ * Upsert rather than insert: regenerating replaces what was there, which
+ * is what pressing the button a second time plainly means. The idea_id
+ * check in the select is what stops one account writing a draft onto
+ * another account's idea by guessing an id.
+ */
+export async function saveDraft(input: {
+  ideaId: number;
+  format: FormatId;
+  content: GeneratedOutput;
+  scriptId?: number | null;
+  newsletterId?: number | null;
+}): Promise<void> {
+  const accountId = await currentAccountId();
+  await queryOne(
+    `insert into idea_outputs
+       (account_id, idea_id, format, content, generated_at, script_id, newsletter_id)
+     select $1, i.id, $3, $4, now(), $5, $6 from ideas i
+      where i.id = $2 and i.account_id = $1
+     on conflict (idea_id, format) do update set
+       content       = excluded.content,
+       generated_at  = excluded.generated_at,
+       script_id     = coalesce(excluded.script_id, idea_outputs.script_id),
+       newsletter_id = coalesce(excluded.newsletter_id, idea_outputs.newsletter_id)
+     returning id`,
+    [
+      accountId,
+      input.ideaId,
+      input.format,
+      JSON.stringify(input.content),
+      input.scriptId ?? null,
+      input.newsletterId ?? null,
+    ],
+  );
 }
