@@ -112,6 +112,8 @@ export const SLIDE_H = 1350;
  */
 export type LayoutId = "plain" | "portrait" | "band" | "full";
 
+export type PhotoKind = "person" | "scene";
+
 export interface Layout {
   id: LayoutId;
   label: string;
@@ -119,14 +121,52 @@ export interface Layout {
   hint: string;
   /** Whether this layout needs a photo to make sense. */
   needsPhoto: boolean;
+  /**
+   * Which kinds of photograph this shape can hold without ruining them.
+   *
+   * The band is a wide strip across the top, so a portrait photograph
+   * cropped into it keeps the shoulders and loses the face. That is not
+   * a matter of taste, it is an unusable slide, so people are kept out
+   * of it entirely rather than left to the rotation's luck.
+   */
+  accepts: PhotoKind[];
 }
 
 export const LAYOUTS: Layout[] = [
-  { id: "plain", label: "Text only", hint: "No photo. Lets a strong line carry the slide", needsPhoto: false },
-  { id: "portrait", label: "Photo right", hint: "Photo down one side, text beside it. For shots of you", needsPhoto: true },
-  { id: "band", label: "Photo top", hint: "Photo across the top, text underneath. For objects and places", needsPhoto: true },
-  { id: "full", label: "Full bleed", hint: "Photo fills the slide, text over a dark wash", needsPhoto: true },
+  {
+    id: "plain",
+    label: "Text only",
+    hint: "No photo. Lets a strong line carry the slide",
+    needsPhoto: false,
+    accepts: [],
+  },
+  {
+    id: "portrait",
+    label: "Photo right",
+    hint: "Photo down one side, full height. Keeps a person whole",
+    needsPhoto: true,
+    accepts: ["person", "scene"],
+  },
+  {
+    id: "band",
+    label: "Photo top",
+    hint: "Wide strip across the top. Places and objects only, it crops a face off",
+    needsPhoto: true,
+    accepts: ["scene"],
+  },
+  {
+    id: "full",
+    label: "Full bleed",
+    hint: "Photo fills the slide, text over a dark wash",
+    needsPhoto: true,
+    accepts: ["person", "scene"],
+  },
 ];
+
+/** Whether this shape can hold that kind of photograph without spoiling it. */
+export function layoutAccepts(layout: LayoutId, kind: PhotoKind): boolean {
+  return LAYOUTS.find((l) => l.id === layout)?.accepts.includes(kind) ?? false;
+}
 
 export function layoutById(id: string | null | undefined): LayoutId {
   return (LAYOUTS.find((l) => l.id === id)?.id ?? "plain") as LayoutId;

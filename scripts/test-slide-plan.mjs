@@ -1,103 +1,163 @@
 #!/usr/bin/env node
 /**
- * Default slide plans must spread photos, not repeat them.
+ * The slide planner, tested against the real code.
  *
- * The point of ordering the bank least-used first is that a new carousel
- * rotates through it. That only works if defaultPlan walks the list
- * instead of reaching for the same id, and if reconcile() keeps a choice
- * already made while still filling a slide that a rewrite added.
+ * An earlier version of this file hand-copied defaultPlan and reconcile
+ * so it could run outside Next. The copy drifted, and the test went on
+ * passing while the real code was broken, which is worse than having no
+ * test. So this compiles lib/slides/design.ts and lib/slides/plan.ts and
+ * imports what actually ships.
+ *
+ *   node scripts/test-slide-plan.mjs
  */
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const src = readFileSync(join(ROOT, "lib", "slides", "plan.ts"), "utf8");
+const out = mkdtempSync(join(tmpdir(), "planner-"));
 
-// The two functions, lifted so the test runs without Next's resolution.
-function defaultPlan(slideCount, photoIds = []) {
-  const slides = []; let next = 0;
-  const take = () => (photoIds.length ? photoIds[next++ % photoIds.length] : null);
-  for (let i = 0; i < slideCount; i++) {
-    const isFirst = i === 0, isLast = i === slideCount - 1;
-    const layout = isFirst || isLast ? "portrait" : i % 2 === 1 ? "band" : "full";
-    slides.push({ layout, photoId: take(), accent: "" });
-  }
-  return { theme: "riseup", slides };
+try {
+  execFileSync(
+    "npx",
+    ["tsc", "lib/slides/design.ts", "lib/slides/plan.ts",
+     "--outDir", out, "--module", "es2022", "--target", "es2022", "--moduleResolution", "bundler"],
+    { cwd: ROOT, stdio: "pipe" },
+  );
+} catch (e) {
+  console.error("Could not compile the planner:\n" + (e.stdout?.toString() ?? e.message));
+  process.exit(1);
 }
-function reconcile(plan, slideCount, photoIds = []) {
-  const base = defaultPlan(slideCount, photoIds);
-  if (!plan?.slides?.length) return base;
-  return {
-    theme: typeof plan.theme === "string" ? plan.theme : base.theme,
-    slides: base.slides.map((d, i) => {
-      const kept = plan.slides[i];
-      if (!kept) return d;
-      const layout = kept.layout ?? d.layout;
-      const wantsPhoto = layout !== "plain";
-      return {
-        layout,
-        photoId: wantsPhoto
-          ? (typeof kept.photoId === "number" ? kept.photoId : d.photoId)
-          : null,
-        accent: typeof kept.accent === "string" ? kept.accent : "",
-      };
-    }),
-  };
-}
+
+// tsc flattens to the common root of the inputs, so both land directly
+// in the output directory rather than under lib/slides/. It also emits
+// extensionless relative imports, which Node's ES loader will not
+// resolve, so they are patched before importing.
+const planJs = join(out, "plan.js");
+writeFileSync(planJs, readFileSync(planJs, "utf8").replace(/(from\s+["']\.\/design)(["'])/g, "$1.js$2"));
+const { defaultPlan, reconcile } = await import(pathToFileURL(join(out, "plan.js")).href);
+const { layoutAccepts } = await import(pathToFileURL(join(out, "design.js")).href);
 
 let f = 0;
-const ok = (l,c,d)=>{console.log(`  ${c?"PASS":"FAIL"}  ${l}${c?"":`\n          ${d}`}`); if(!c)f++;};
+const ok = (l, c, d) => {
+  console.log(`  ${c ? "PASS" : "FAIL"}  ${l}${c ? "" : `\n          ${d}`}`);
+  if (!c) f++;
+};
 
-const bank = [10,11,12,13,14,15,16,17,18,19];
+// Four people and six places, roughly the shape of a real bank.
+const bank = [
+  { id: 10, kind: "person" }, { id: 11, kind: "scene" }, { id: 12, kind: "person" },
+  { id: 13, kind: "scene" }, { id: 14, kind: "scene" }, { id: 15, kind: "person" },
+  { id: 16, kind: "scene" }, { id: 17, kind: "scene" }, { id: 18, kind: "person" },
+  { id: 19, kind: "scene" },
+];
+const kindOf = (id) => bank.find((p) => p.id === id)?.kind;
 
 const p8 = defaultPlan(8, bank);
-ok("every slide gets a photo", p8.slides.every(s=>s.photoId!==null), JSON.stringify(p8.slides.map(s=>s.photoId)));
-ok("no photo repeats within a deck", new Set(p8.slides.map(s=>s.photoId)).size===8, JSON.stringify(p8.slides.map(s=>s.photoId)));
-ok("it starts at the least used", p8.slides[0].photoId===10, String(p8.slides[0].photoId));
-ok("cover and closing slide match", p8.slides[0].layout==="portrait" && p8.slides[7].layout==="portrait",
+ok("every slide gets a photo", p8.slides.every((s) => s.photoId !== null),
+  JSON.stringify(p8.slides.map((s) => s.photoId)));
+ok("no photo repeats within a deck",
+  new Set(p8.slides.map((s) => s.photoId)).size === 8,
+  JSON.stringify(p8.slides.map((s) => s.photoId)));
+ok("NO PERSON IS EVER PUT IN THE WIDE TOP STRIP",
+  p8.slides.every((s) => s.layout !== "band" || kindOf(s.photoId) === "scene"),
+  JSON.stringify(p8.slides.map((s) => `${s.layout}:${kindOf(s.photoId)}`)));
+ok("cover and closing slide match",
+  p8.slides[0].layout === "portrait" && p8.slides[7].layout === "portrait",
   `${p8.slides[0].layout}/${p8.slides[7].layout}`);
-ok("the middle alternates", p8.slides.slice(1,7).map(s=>s.layout).join(",")==="band,full,band,full,band,full",
-  p8.slides.slice(1,7).map(s=>s.layout).join(","));
+ok("the middle alternates",
+  p8.slides.slice(1, 7).map((s) => s.layout).join(",") === "band,full,band,full,band,full",
+  p8.slides.slice(1, 7).map((s) => s.layout).join(","));
 
-// More slides than photos must wrap rather than leave blanks.
-const small = defaultPlan(5, [7,8]);
-ok("a small bank wraps instead of running out", small.slides.every(s=>s.photoId!==null),
-  JSON.stringify(small.slides.map(s=>s.photoId)));
+const small = defaultPlan(5, [{ id: 7, kind: "person" }, { id: 8, kind: "scene" }]);
+ok("a small bank fills every slide anyway",
+  small.slides.every((s) => s.photoId !== null),
+  JSON.stringify(small.slides.map((s) => s.photoId)));
+ok("...and still keeps the person out of the band",
+  small.slides.every((s) => s.layout !== "band" || s.photoId === 8),
+  JSON.stringify(small.slides.map((s) => `${s.layout}:${s.photoId}`)));
 
-ok("an empty bank gives empty slots, not a crash", defaultPlan(3, []).slides.every(s=>s.photoId===null), "");
+ok("an empty bank gives empty slots, not a crash",
+  defaultPlan(3, []).slides.every((s) => s.photoId === null), "");
 
-// reconcile: a deliberate choice survives, a deliberate "none" survives.
-const chosen = {theme:"night", slides:[{layout:"full",photoId:99,accent:"hey"},{layout:"plain",photoId:null,accent:""}]};
+// A bank with no scenes at all cannot fill a band, and must say so with
+// an empty slot rather than a cropped face.
+const noScenes = defaultPlan(3, [{ id: 1, kind: "person" }, { id: 2, kind: "person" }]);
+ok("with no places in the bank, a band slide stays empty",
+  noScenes.slides.filter((s) => s.layout === "band").every((s) => s.photoId === null),
+  JSON.stringify(noScenes.slides.map((s) => `${s.layout}:${s.photoId}`)));
+
+const chosen = {
+  theme: "night",
+  slides: [
+    { layout: "full", photoId: 15, accent: "hey" },
+    { layout: "plain", photoId: null, accent: "" },
+  ],
+};
 const r = reconcile(chosen, 2, bank);
-ok("a chosen photo is kept", r.slides[0].photoId===99, String(r.slides[0].photoId));
-ok("a text-only slide carries no photo", r.slides[1].photoId===null, String(r.slides[1].photoId));
+ok("a chosen photo is kept", r.slides[0].photoId === 15, String(r.slides[0].photoId));
+ok("a text-only slide carries no photo", r.slides[1].photoId === null, String(r.slides[1].photoId));
+ok("the chosen theme is kept", r.theme === "night", r.theme);
 
-// The case that was leaving old carousels empty: a plan saved before
-// photos existed has nulls everywhere, and must now fill in.
-const stale = {theme:"riseup", slides:[
-  {layout:"portrait",photoId:null,accent:""},
-  {layout:"band",photoId:null,accent:""},
-  {layout:"full",photoId:null,accent:""},
-]};
+const grown = reconcile(chosen, 4, bank);
+ok("slides added by a rewrite get a photo",
+  grown.slides[2].photoId !== null && grown.slides[3].photoId !== null,
+  JSON.stringify(grown.slides.map((s) => s.photoId)));
+ok("...and the old choices still stand",
+  grown.slides[0].photoId === 15 && grown.slides[1].photoId === null,
+  JSON.stringify(grown.slides.map((s) => s.photoId)));
+ok("a shorter rewrite drops the extra slides", reconcile(chosen, 1, bank).slides.length === 1, "");
+
+const stale = {
+  theme: "riseup",
+  slides: [
+    { layout: "portrait", photoId: null, accent: "" },
+    { layout: "band", photoId: null, accent: "" },
+    { layout: "full", photoId: null, accent: "" },
+  ],
+};
 const healed = reconcile(stale, 3, bank);
 ok("a plan from before photos existed fills itself in",
-  healed.slides.every(s=>s.photoId!==null), JSON.stringify(healed.slides.map(s=>s.photoId)));
-ok("...without repeating a photo", new Set(healed.slides.map(s=>s.photoId)).size===3,
-  JSON.stringify(healed.slides.map(s=>s.photoId)));
-ok("the chosen theme is kept", r.theme==="night", r.theme);
+  healed.slides.every((s) => s.photoId !== null),
+  JSON.stringify(healed.slides.map((s) => s.photoId)));
+ok("...without repeating a photo",
+  new Set(healed.slides.map((s) => s.photoId)).size === 3,
+  JSON.stringify(healed.slides.map((s) => s.photoId)));
 
-// A rewrite that adds slides fills the new ones from the bank.
-const grown = reconcile(chosen, 4, bank);
-ok("slides added by a rewrite get a photo", grown.slides[2].photoId!==null && grown.slides[3].photoId!==null,
-  JSON.stringify(grown.slides.map(s=>s.photoId)));
-ok("...and the old choices still stand", grown.slides[0].photoId===99 && grown.slides[1].photoId===null,
-  JSON.stringify(grown.slides.map(s=>s.photoId)));
+const collide = {
+  theme: "riseup",
+  slides: [
+    { layout: "portrait", photoId: 12, accent: "" },
+    { layout: "band", photoId: null, accent: "" },
+    { layout: "full", photoId: 11, accent: "" },
+    { layout: "band", photoId: null, accent: "" },
+  ],
+};
+const fixed = reconcile(collide, 4, bank);
+const picks = fixed.slides.map((s) => s.photoId);
+ok("no photo appears twice after merging a stored plan",
+  new Set(picks).size === picks.length, JSON.stringify(picks));
+ok("...and the slides chosen by hand keep their photo",
+  picks[0] === 12 && picks[2] === 11, JSON.stringify(picks));
 
-// A rewrite that shortens the deck must not keep orphan slides.
-ok("a shorter rewrite drops the extra slides", reconcile(chosen, 1, bank).slides.length===1, "");
+// THE BUG AARON FOUND: a headshot stored on a band slide, cropped to a neck.
+const cropped = reconcile(
+  { theme: "riseup", slides: [{ layout: "band", photoId: 10, accent: "" }] }, 1, bank);
+ok("a person stored on a band slide is swapped for a place",
+  kindOf(cropped.slides[0].photoId) === "scene", JSON.stringify(cropped.slides));
 
-ok("source still walks the list", /next\+\+ % photoIds\.length/.test(src), "defaultPlan no longer rotates");
+const gone = reconcile(
+  { theme: "riseup", slides: [{ layout: "full", photoId: 9999, accent: "" }] }, 1, bank);
+ok("a photo deleted since the plan was made is replaced",
+  gone.slides[0].photoId !== 9999 && gone.slides[0].photoId !== null,
+  JSON.stringify(gone.slides));
 
-console.log(f===0 ? "\nslide plan: all checks passed.\n" : `\n${f} FAILURE(S)\n`);
-process.exit(f===0?0:1);
+ok("the band layout refuses people", !layoutAccepts("band", "person"), "band accepts person");
+ok("the band layout takes places", layoutAccepts("band", "scene"), "band refuses scene");
+ok("the side layout takes people", layoutAccepts("portrait", "person"), "portrait refuses person");
+
+rmSync(out, { recursive: true, force: true });
+console.log(f === 0 ? "\nslide plan: all checks passed.\n" : `\n${f} FAILURE(S)\n`);
+process.exit(f === 0 ? 0 : 1);

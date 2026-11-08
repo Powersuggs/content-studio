@@ -11,8 +11,12 @@ import { currentAccountId } from "@/lib/auth/current-account";
  * serves them.
  */
 
+export type PhotoKind = "person" | "scene";
+
 export interface Photo {
   id: number;
+  /** person or scene. Decides which slide layouts may hold it. */
+  kind: PhotoKind;
   label: string | null;
   tags: string[];
   mime: string;
@@ -25,6 +29,7 @@ export interface Photo {
 
 interface Row {
   id: string;
+  kind: string;
   label: string | null;
   tags: string | null;
   mime: string;
@@ -35,11 +40,13 @@ interface Row {
   created_at: string;
 }
 
-const COLUMNS = "id, label, tags, mime, byte_size, width, height, source, created_at";
+const COLUMNS =
+  "id, kind, label, tags, mime, byte_size, width, height, source, created_at";
 
 function toPhoto(r: Row): Photo {
   return {
     id: Number(r.id),
+    kind: r.kind === "person" ? "person" : "scene",
     label: r.label,
     tags: (r.tags ?? "")
       .split(",")
@@ -119,15 +126,16 @@ export async function getPhotoBytes(
 
 export async function updatePhoto(
   id: number,
-  input: { label?: string | null; tags?: string | null },
+  input: { label?: string | null; tags?: string | null; kind?: PhotoKind | null },
 ): Promise<void> {
   const accountId = await currentAccountId();
   await query(
     `update photos
         set label = coalesce($3, label),
-            tags  = coalesce($4, tags)
+            tags  = coalesce($4, tags),
+            kind  = coalesce($5, kind)
       where id = $1 and account_id = $2`,
-    [id, accountId, input.label ?? null, input.tags ?? null],
+    [id, accountId, input.label ?? null, input.tags ?? null, input.kind ?? null],
   );
 }
 
