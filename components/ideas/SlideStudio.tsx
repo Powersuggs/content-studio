@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Download, Check, Loader2, ImageOff } from "lucide-react";
+import { Download, Check, Loader2, ImageOff, Smartphone } from "lucide-react";
 import {
   LAYOUTS,
   THEMES,
@@ -69,6 +69,11 @@ export default function SlideStudio({
   const [saved, setSaved] = useState(false);
   const [downloading, setDownloading] = useState<number | null>(null);
   const [downloadNote, setDownloadNote] = useState<string | null>(null);
+  // The slides as real files, held so the share can happen inside the tap
+  // that asks for it. See prepareForPhone below for why that matters.
+  const [phoneFiles, setPhoneFiles] = useState<File[] | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [canSharePhotos, setCanSharePhotos] = useState(false);
   const [, startTransition] = useTransition();
   const firstRun = useRef(true);
 
@@ -120,6 +125,86 @@ export default function SlideStudio({
       total: lines.length,
       handle,
     });
+
+  // Only phones have somewhere to share a photo TO. Asked rather than
+  // guessed from the user agent, with a real file, because a browser that
+  // has navigator.share may still refuse files.
+  useEffect(() => {
+    try {
+      const probe = new File([new Blob([new Uint8Array([0])])], "probe.png", {
+        type: "image/png",
+      });
+      setCanSharePhotos(
+        typeof navigator !== "undefined" &&
+          typeof navigator.share === "function" &&
+          typeof navigator.canShare === "function" &&
+          navigator.canShare({ files: [probe] }),
+      );
+    } catch {
+      setCanSharePhotos(false);
+    }
+  }, []);
+
+  /**
+   * Two taps, on purpose.
+   *
+   * iOS will only open a share sheet inside the tap that asked for one.
+   * Fetching eight slides first breaks that: by the time the files exist
+   * the tap is over, and Safari refuses. So the first tap fetches and the
+   * second shares, which is one more tap than ideal and the difference
+   * between working and not.
+   */
+  async function prepareForPhone() {
+    setPreparing(true);
+    setDownloadNote(null);
+    const files: File[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      try {
+        const res = await fetch(urlFor(i));
+        if (!res.ok) throw new Error(String(res.status));
+        const blob = await res.blob();
+        files.push(
+          new File([blob], `slide-${String(i + 1).padStart(2, "0")}.png`, {
+            type: "image/png",
+          }),
+        );
+      } catch {
+        /* a missing slide is reported below rather than stopping the rest */
+      }
+    }
+    setPreparing(false);
+    if (files.length === 0) {
+      setDownloadNote("Could not fetch the slides. Check your connection and try again.");
+      return;
+    }
+    setPhoneFiles(files);
+    setDownloadNote(
+      files.length < lines.length
+        ? `${files.length} of ${lines.length} slides are ready. Tap again to send them to your photos.`
+        : "Ready. Tap again, then choose Save to Photos.",
+    );
+  }
+
+  async function shareToPhone() {
+    if (!phoneFiles) return;
+    try {
+      await navigator.share({ files: phoneFiles, title: "Carousel slides" });
+      setDownloadNote("Sent. Choose Save to Photos and they land in your camera roll in order.");
+    } catch (err) {
+      // Dismissing the sheet throws too, and that is not a failure worth
+      // shouting about.
+      if ((err as Error)?.name !== "AbortError") {
+        setDownloadNote("Your phone would not accept the share. Use Download all instead.");
+      }
+    }
+  }
+
+  // A slide changed, so the files in hand are the old ones. Dropping them
+  // turns the button back into "Save to my photos", which is better than
+  // silently sending the version he just edited away from.
+  useEffect(() => {
+    setPhoneFiles(null);
+  }, [plan]);
 
   async function downloadAll() {
     // One at a time, named in order, so they land in the right sequence in
@@ -217,6 +302,25 @@ export default function SlideStudio({
             )}
             {downloading !== null ? `Saving ${downloading + 1}` : "Download all"}
           </button>
+          {canSharePhotos && (
+            <button
+              type="button"
+              onClick={phoneFiles ? shareToPhone : prepareForPhone}
+              disabled={preparing}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-accent px-2.5 py-1.5 text-[11px] font-medium text-accent disabled:opacity-50"
+            >
+              {preparing ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <Smartphone size={12} />
+              )}
+              {preparing
+                ? "Getting them ready"
+                : phoneFiles
+                  ? "Send to Photos"
+                  : "Save to my photos"}
+            </button>
+          )}
         </div>
       </div>
 
