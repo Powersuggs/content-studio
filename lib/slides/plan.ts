@@ -54,12 +54,21 @@ export function defaultPlan(slideCount: number, photos: PhotoRef[] = []): Carous
   // into the band crops it to shoulders and chin, which is not a matter
   // of taste but an unusable slide.
   //
-  // `prefer` asks for a kind without demanding it. The cover and the
-  // closing slide are where a face does the most work: the first decides
-  // whether anyone swipes, the last is where the ask lands, and an ask
-  // from a person is a different thing from an ask from a coffee cup. The
-  // middle slides carry ideas, and a face on every one of them would be
-  // the same slide eight times.
+  // `prefer` asks for a kind without demanding it, and EVERY slide states
+  // a preference, which is the part that was missing the first time.
+  //
+  // The cover and the closing slide are where a face does the most work:
+  // the first decides whether anyone swipes, the last is where the ask
+  // lands, and an ask from a person is a different thing from an ask from
+  // a coffee cup. So both bookends ask for a person.
+  //
+  // The middle asks for a place. Leaving the middle with no preference
+  // looked harmless and was not: photos are walked least-used first, a
+  // fresh headshot is the least used thing in the bank, and full bleed
+  // accepts people, so the middle quietly filled with faces. The first
+  // deck built this way came out five faces in eight slides, which is the
+  // same slide five times with different words on it. A preference on
+  // both ends of the rule is what keeps the rhythm.
   const take = (layout: LayoutId, prefer?: PhotoKind): number | null => {
     const unused = (kind?: PhotoKind) =>
       photos.find(
@@ -89,7 +98,7 @@ export function defaultPlan(slideCount: number, photos: PhotoRef[] = []): Carous
     const layout: LayoutId = bookend ? "portrait" : i % 2 === 1 ? "band" : "full";
     slides.push({
       layout,
-      photoId: take(layout, bookend ? "person" : undefined),
+      photoId: take(layout, bookend ? "person" : "scene"),
       accent: "",
     });
   }
