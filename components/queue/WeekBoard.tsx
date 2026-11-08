@@ -179,17 +179,24 @@ export default function WeekBoard({
                             Ideas page first.
                           </p>
                         ) : (
-                          ready.slice(0, 8).map((r) => (
-                            <button
-                              key={`${r.ideaId}-${r.format}`}
-                              type="button"
-                              onClick={() => put(r, day, slot.id)}
-                              disabled={isPending}
-                              className="block w-full truncate rounded border border-border px-2 py-1 text-left text-[11px] text-muted hover:border-accent hover:text-accent disabled:opacity-50"
-                            >
-                              {formatLabel(r.format)}: {r.hook || r.title}
-                            </button>
-                          ))
+                          // Every waiting draft, in a box that scrolls. This
+                          // used to show the first eight, which quietly made
+                          // the ninth impossible to schedule at all: not
+                          // hidden behind a "show more", simply absent, with
+                          // nothing on screen to say so.
+                          <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
+                            {ready.map((r) => (
+                              <button
+                                key={`${r.ideaId}-${r.format}`}
+                                type="button"
+                                onClick={() => put(r, day, slot.id)}
+                                disabled={isPending}
+                                className="block w-full truncate rounded border border-border px-2 py-1 text-left text-[11px] text-muted hover:border-accent hover:text-accent disabled:opacity-50"
+                              >
+                                {formatLabel(r.format)}: {r.hook || r.title}
+                              </button>
+                            ))}
+                          </div>
                         )}
                         <button
                           type="button"
