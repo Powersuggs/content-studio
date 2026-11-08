@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Archive, Check, Sparkles, Loader2, Copy, RotateCcw, X } from "lucide-react";
+import { Archive, Check, Sparkles, Loader2, Copy, RotateCcw, X, ListPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toggleOutputAction, archiveIdeaAction } from "@/app/ideas/actions";
+import { queueScriptAction } from "@/app/scripts/actions";
 import { formatLabel } from "@/lib/ideas/formats";
 import type { Idea, IdeaFilter } from "@/lib/ideas/queries";
 import type { GeneratedOutput } from "@/lib/ideas/generate";
@@ -13,6 +14,7 @@ export interface DraftView {
   format: string;
   content: GeneratedOutput | null;
   scriptId: number | null;
+  scriptStatus: string | null;
   newsletterId: number | null;
 }
 
@@ -347,26 +349,21 @@ function DraftPanel({
             />
           )}
 
-          {(draft?.newsletterId || draft?.scriptId) && (
+          {draft?.newsletterId && (
             <p className="text-[11px] text-faint">
-              {draft.newsletterId ? (
-                <>
-                  Saved as a draft on your{" "}
-                  <a href="/newsletter" className="text-accent hover:underline">
-                    Newsletter
-                  </a>{" "}
-                  page too.
-                </>
-              ) : (
-                <>
-                  Saved to your script queue for{" "}
-                  <a href="/session-mode" className="text-accent hover:underline">
-                    Session Mode
-                  </a>
-                  .
-                </>
-              )}
+              Saved as a draft on your{" "}
+              <a href="/newsletter" className="text-accent hover:underline">
+                Newsletter
+              </a>{" "}
+              page too.
             </p>
+          )}
+
+          {draft?.scriptId && (
+            <SendToSessionMode
+              scriptId={draft.scriptId}
+              status={draft.scriptStatus}
+            />
           )}
         </div>
       )}
@@ -394,4 +391,56 @@ function sourceLabel(source: string): string {
   if (source === "capture") return "Captured";
   if (source === "suggested") return "Suggested from your posts";
   return source;
+}
+
+/**
+ * Putting a written reel in front of the teleprompter.
+ *
+ * Writing a reel stores a script, and the panel used to say it had been
+ * "saved to your script queue for Session Mode". It had not. A script is
+ * stored as a draft, Session Mode only shows the queued ones, and the
+ * sentence sent him to an empty page.
+ *
+ * It is a button rather than an automatic queue because rewriting a reel
+ * writes another script each time. Queueing every one of them would fill
+ * the teleprompter with the versions he rejected.
+ */
+function SendToSessionMode({
+  scriptId,
+  status,
+}: {
+  scriptId: number;
+  status: string | null;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [sent, setSent] = useState(status === "queued" || status === "filmed");
+
+  if (sent) {
+    return (
+      <p className="text-[11px] text-faint">
+        In the queue for{" "}
+        <a href="/session-mode" className="text-accent hover:underline">
+          Session Mode
+        </a>
+        .
+      </p>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        startTransition(async () => {
+          await queueScriptAction(scriptId);
+          setSent(true);
+        })
+      }
+      disabled={isPending}
+      className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+    >
+      <ListPlus size={11} strokeWidth={2} />
+      {isPending ? "Sending" : "Send to Session Mode"}
+    </button>
+  );
 }

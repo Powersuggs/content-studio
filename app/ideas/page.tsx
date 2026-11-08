@@ -50,6 +50,7 @@ export default async function IdeasPage({
       format: d.format,
       content: d.content,
       scriptId: d.scriptId,
+      scriptStatus: d.scriptStatus,
       newsletterId: d.newsletterId,
     }));
   }
