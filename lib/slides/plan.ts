@@ -1,4 +1,10 @@
-import type { LayoutId } from "./design";
+import { layoutAccepts, type LayoutId, type PhotoKind } from "./design";
+
+/** A photo as the planner needs it: an id and what is in the picture. */
+export interface PhotoRef {
+  id: number;
+  kind: PhotoKind;
+}
 
 /**
  * A carousel's slides, as something that can be edited and kept.
@@ -39,55 +45,121 @@ export interface CarouselPlan {
  * far less work than eight blanks you must fill, and being wrong is
  * obvious the moment you see it.
  */
-export function defaultPlan(slideCount: number, photoIds: number[] = []): CarouselPlan {
+export function defaultPlan(slideCount: number, photos: PhotoRef[] = []): CarouselPlan {
   const slides: SlidePlan[] = [];
-  // Walked in order and never repeated within one deck. The list arrives
-  // least-used first, so a new carousel reaches for the photographs that
-  // have had the least airtime, and the bank rotates itself instead of
-  // the same three shots appearing in everything.
-  let next = 0;
-  const take = () => (photoIds.length ? photoIds[next++ % photoIds.length] : null);
+  const taken = new Set<number>();
+
+  // Walked least-used first and never repeated in one deck, but only
+  // offered to a layout that can actually hold it. Dropping a headshot
+  // into the band crops it to shoulders and chin, which is not a matter
+  // of taste but an unusable slide.
+  const take = (layout: LayoutId): number | null => {
+    const fit = photos.find((p) => !taken.has(p.id) && layoutAccepts(layout, p.kind));
+    if (fit) {
+      taken.add(fit.id);
+      return fit.id;
+    }
+    // Nothing unused fits, so reuse the least-used one that does. A
+    // repeat is better than an empty frame.
+    return photos.find((p) => layoutAccepts(layout, p.kind))?.id ?? null;
+  };
 
   for (let i = 0; i < slideCount; i++) {
     const isFirst = i === 0;
     const isLast = i === slideCount - 1;
     const layout: LayoutId = isFirst || isLast ? "portrait" : i % 2 === 1 ? "band" : "full";
-    slides.push({ layout, photoId: take(), accent: "" });
+    slides.push({ layout, photoId: take(layout), accent: "" });
   }
   return { theme: "riseup", slides };
 }
+
+const str = (v: unknown) => (typeof v === "string" ? v : "");
 
 /** Grows or trims a stored plan to match a draft that has been rewritten. */
 export function reconcile(
   plan: CarouselPlan | null,
   slideCount: number,
-  photoIds: number[] = [],
+  photos: PhotoRef[] = [],
 ): CarouselPlan {
-  const base = defaultPlan(slideCount, photoIds);
+  const base = defaultPlan(slideCount, photos);
   if (!plan?.slides?.length) return base;
+
+  const kindOf = new Map(photos.map((p) => [p.id, p.kind]));
+  const chosen = new Set<number>();
+  // Falling back to the default slide's photo is wrong: that photo was
+  // picked for the default LAYOUT, which may not be the layout actually
+  // stored. A headshot on a band slide was landing on another headshot.
+  const firstFitting = (layout: LayoutId) =>
+    photos.find((p) => layoutAccepts(layout, p.kind))?.id ?? null;
+
+  const slides = base.slides.map((d, i) => {
+    const kept = plan.slides[i];
+    if (!kept) return d;
+    const layout = (kept.layout ?? d.layout) as LayoutId;
+    // The layout says whether this slide carries a picture; the picker
+    // only says which one. Wanting none is said by choosing Text only.
+    if (layout === "plain") return { layout, photoId: null, accent: str(kept.accent) };
+
+    let photoId = typeof kept.photoId === "number" ? kept.photoId : d.photoId;
+    const kind = photoId === null ? null : kindOf.get(photoId);
+    if (photoId !== null && kind && !layoutAccepts(layout, kind)) {
+      // A stored choice that no longer suits its shape, because the
+      // layout changed or the photo was reclassified, gives way to one
+      // chosen for THIS layout. Keeping it would mean a cropped face.
+      photoId = firstFitting(layout);
+    } else if (photoId !== null && !kind) {
+      // A photo that is no longer in the bank at all, deleted since the
+      // plan was made, is replaced rather than left as a broken frame.
+      photoId = firstFitting(layout);
+    } else if (typeof kept.photoId === "number") {
+      chosen.add(i);
+    }
+
+    return { layout, photoId, accent: str(kept.accent) };
+  });
+
   return {
     theme: typeof plan.theme === "string" ? plan.theme : base.theme,
-    slides: base.slides.map((d, i) => {
-      const kept = plan.slides[i];
-      if (!kept) return d;
-      const layout = (kept.layout ?? d.layout) as LayoutId;
-      // The layout says whether this slide has a picture on it; the
-      // picker only says which one. Trying to tell "none chosen yet"
-      // apart from "none wanted" by a stored null was guesswork, and it
-      // left carousels planned before photos existed full of empty
-      // frames. Wanting no photo is now expressed by choosing Text only.
-      const wantsPhoto = layout !== "plain";
-      return {
-        layout,
-        photoId: wantsPhoto
-          ? typeof kept.photoId === "number"
-            ? kept.photoId
-            : d.photoId
-          : null,
-        accent: typeof kept.accent === "string" ? kept.accent : "",
-      };
-    }),
+    slides: dedupe(slides, photos, chosen),
   };
+}
+
+/**
+ * Stops the same photograph appearing twice in one carousel.
+ *
+ * A photo the person chose never moves. Only the automatically filled
+ * ones give way, which is the point of having chosen: otherwise a
+ * default landing first would evict a deliberate pick.
+ *
+ * The replacement has to suit the slide's shape as well as be free, and
+ * collisions only move when there is somewhere to move them. A bank
+ * smaller than the deck repeats, which is the honest outcome.
+ */
+function dedupe(
+  slides: SlidePlan[],
+  photos: PhotoRef[],
+  chosen: Set<number>,
+): SlidePlan[] {
+  if (photos.length === 0) return slides;
+
+  const used = new Set<number>();
+  for (const i of chosen) {
+    const id = slides[i]?.photoId;
+    if (typeof id === "number") used.add(id);
+  }
+  const spare = photos.filter((p) => !slides.some((s) => s.photoId === p.id));
+
+  return slides.map((s, i) => {
+    if (s.photoId === null || chosen.has(i)) return s;
+    if (!used.has(s.photoId)) {
+      used.add(s.photoId);
+      return s;
+    }
+    const swap = spare.find((p) => !used.has(p.id) && layoutAccepts(s.layout, p.kind));
+    if (!swap) return s;
+    used.add(swap.id);
+    return { ...s, photoId: swap.id };
+  });
 }
 
 /**

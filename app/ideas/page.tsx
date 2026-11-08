@@ -75,7 +75,7 @@ export default async function IdeasPage({
       const ub = usage.get(b.id) ?? 0;
       return ua !== ub ? ua - ub : a.id - b.id;
     })
-    .map((p) => ({ id: p.id, label: p.label, uses: usage.get(p.id) ?? 0 }));
+    .map((p) => ({ id: p.id, label: p.label, kind: p.kind, uses: usage.get(p.id) ?? 0 }));
   const [handle] = await safeLoad(() => getMyHandle(), null as string | null, "ideas");
 
   const setupError = ideasError;

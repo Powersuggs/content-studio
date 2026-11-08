@@ -2,7 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Download, Check, Loader2, ImageOff } from "lucide-react";
-import { LAYOUTS, THEMES, type LayoutId } from "@/lib/slides/design";
+import {
+  LAYOUTS,
+  THEMES,
+  layoutAccepts,
+  type LayoutId,
+  type PhotoKind,
+} from "@/lib/slides/design";
 import {
   reconcile,
   slideUrl,
@@ -16,6 +22,8 @@ export interface PhotoChoice {
   label: string | null;
   /** How many slides already use it. Drives the default ordering. */
   uses: number;
+  /** person or scene. Decides which layouts may hold it. */
+  kind: PhotoKind;
 }
 
 /**
@@ -50,11 +58,12 @@ export default function SlideStudio({
   initialPlan: CarouselPlan | null;
 }) {
   const lines = useMemo(() => [title, ...parts].filter(Boolean), [title, parts]);
-  // photos arrives least-used first, so handing the ids straight through
-  // is what makes a new carousel rotate through the bank.
-  const photoIds = useMemo(() => photos.map((p) => p.id), [photos]);
+  // photos arrives least-used first, so handing it straight through is
+  // what makes a new carousel rotate through the bank. The kind travels
+  // with it so the planner never puts a face in a letterbox.
+  const refs = useMemo(() => photos.map((p) => ({ id: p.id, kind: p.kind })), [photos]);
   const [plan, setPlan] = useState<CarouselPlan>(() =>
-    reconcile(initialPlan, lines.length, photoIds),
+    reconcile(initialPlan, lines.length, refs),
   );
   const [active, setActive] = useState(0);
   const [saved, setSaved] = useState(false);
@@ -220,7 +229,7 @@ export default function SlideStudio({
                       photoId:
                         l.id === "plain"
                           ? null
-                          : (cur.photoId ?? photoIds[active % Math.max(photoIds.length, 1)] ?? null),
+                          : keepsOrSwaps(l.id as LayoutId, cur.photoId, photos),
                     })
                   }
                   className={`rounded-lg border px-2 py-1 text-[11px] ${
@@ -243,6 +252,9 @@ export default function SlideStudio({
                   <ImageOff size={10} /> not used on a text-only slide
                 </span>
               )}
+              {cur.layout === "band" && (
+                <span className="text-faint">places and objects only</span>
+              )}
             </p>
             {photos.length === 0 ? (
               <p className="text-[11px] text-faint">
@@ -257,7 +269,9 @@ export default function SlideStudio({
                 }
                 className="w-full rounded-lg border border-border bg-panel px-2 py-1.5 text-[11px] text-text outline-none focus:border-accent"
               >
-                {photos.map((p) => (
+                {photos
+                  .filter((p) => layoutAccepts(cur.layout, p.kind))
+                  .map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label || `Photo ${p.id}`}
                     {p.uses > 0 ? `  (used ${p.uses}\u00d7)` : ""}
@@ -305,4 +319,19 @@ export default function SlideStudio({
       </div>
     </div>
   );
+}
+
+/**
+ * Keeps the current photo if the new shape can hold it, otherwise picks
+ * the least-used one that can. Switching a slide to the band while a
+ * headshot is on it would otherwise crop the face off.
+ */
+function keepsOrSwaps(
+  layout: LayoutId,
+  current: number | null,
+  photos: PhotoChoice[],
+): number | null {
+  const cur = photos.find((p) => p.id === current);
+  if (cur && layoutAccepts(layout, cur.kind)) return cur.id;
+  return photos.find((p) => layoutAccepts(layout, p.kind))?.id ?? null;
 }

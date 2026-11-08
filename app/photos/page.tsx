@@ -15,6 +15,7 @@ export default async function PhotosPage() {
 
   const views: PhotoView[] = photos.map((p) => ({
     id: p.id,
+    kind: p.kind,
     label: p.label,
     tags: p.tags,
     width: p.width,

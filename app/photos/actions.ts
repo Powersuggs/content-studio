@@ -5,7 +5,7 @@ import { deletePhoto, updatePhoto } from "@/lib/photos/queries";
 
 export async function updatePhotoAction(
   id: number,
-  input: { label?: string; tags?: string },
+  input: { label?: string; tags?: string; kind?: "person" | "scene" },
 ): Promise<void> {
   await updatePhoto(id, input);
   revalidatePath("/photos");
