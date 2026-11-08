@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { generateJson } from "@/lib/ai/generate-json";
 import { JSON_ONLY_INSTRUCTION } from "@/lib/ai/signals";
-import { getWinningPosts, getWritingGuardrail, RATE_FLOOR } from "@/lib/queries";
+import {
+  getWinningPosts,
+  getReferenceMaterial,
+  getWritingGuardrail,
+  RATE_FLOOR,
+} from "@/lib/queries";
 import { listIdeas } from "@/lib/ideas/queries";
 import {
   SUGGEST_SYSTEM,
@@ -17,7 +22,12 @@ const COUNT = 8;
 
 export async function POST() {
   try {
-    const winners = await getWinningPosts(15);
+    // Inspiration is a bonus, not a requirement: an empty board should
+    // cost the second half of the prompt, not the whole button.
+    const [winners, refs] = await Promise.all([
+      getWinningPosts(15),
+      getReferenceMaterial(12).catch(() => []),
+    ]);
 
     if (winners.length === 0) {
       return NextResponse.json(
@@ -39,8 +49,8 @@ export async function POST() {
     const result = await generateJson({
       system: `${SUGGEST_SYSTEM}\n\n${guardrail}\n\n${JSON_ONLY_INSTRUCTION}\n\nReturn exactly this shape:\n${suggestShape(COUNT)}`,
       user: alreadyHave
-        ? `${suggestUserPrompt(winners, COUNT)}\n\nIdeas already on their list, do not repeat these:\n${alreadyHave}`
-        : suggestUserPrompt(winners, COUNT),
+        ? `${suggestUserPrompt(winners, COUNT, refs)}\n\nIdeas already on their list, do not repeat these:\n${alreadyHave}`
+        : suggestUserPrompt(winners, COUNT, refs),
       maxTokens: 10000,
       useVoice: true,
     });
@@ -53,7 +63,11 @@ export async function POST() {
       );
     }
 
-    return NextResponse.json({ ideas, learnedFrom: winners.length });
+    return NextResponse.json({
+      ideas,
+      learnedFrom: winners.length,
+      referencedFrom: refs.length,
+    });
   } catch (err) {
     const explained = explainDbError(err);
     if (explained) return NextResponse.json({ error: explained }, { status: 503 });

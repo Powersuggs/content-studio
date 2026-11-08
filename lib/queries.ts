@@ -1010,6 +1010,55 @@ export async function getReferencePostsGroupedByHandle(): Promise<
   return grouped;
 }
 
+export interface ReferenceMaterial {
+  handle: string;
+  caption: string | null;
+  breakdown: string | null;
+  happened_on: string;
+}
+
+/**
+ * What he saved from other creators, for the idea suggester.
+ *
+ * His own history answers "what works for me". This answers "what is
+ * working out there", which is a different and complementary question:
+ * his own posts cannot tell him about a format he has never tried.
+ *
+ * Posts that have been reverse-engineered come first. A breakdown is
+ * somebody having already worked out WHY a post landed, and the why is
+ * the transferable part. A caption on its own still helps, it is just
+ * raw material rather than a lesson.
+ *
+ * Same `handle is distinct from mine` guard the rest of Inspiration
+ * uses, so his own posts can never leak into this half of the prompt and
+ * get counted twice.
+ */
+export async function getReferenceMaterial(limit = 12): Promise<ReferenceMaterial[]> {
+  const myHandle = await getMyHandle();
+  const timezone = DEFAULT_APP_TIMEZONE;
+  return query<ReferenceMaterial>(
+    `select p.handle, p.caption, i.content as breakdown,
+            ${postHappenedExpr(2, "p")} as happened_on
+     from posts p
+     left join lateral (
+       select content from insights
+       where insights.post_id = p.id and insights.kind = 'breakdown'
+         and insights.account_id = p.account_id
+       order by insights.created_at desc
+       limit 1
+     ) i on true
+     where p.handle is distinct from $1
+       and p.account_id = $4
+       and p.caption is not null
+       and length(btrim(p.caption)) > 0
+     order by (i.content is not null) desc,
+              ${postHappenedExpr(2, "p")} desc nulls last,
+              p.id desc
+     limit $3`,
+    [myHandle, timezone, limit, await currentAccountId()],
+  );
+}
+
 /**
  * Remove a reference post from Inspiration. Scoped with the same
  * `handle is distinct from mine` guard as the read query above, so this
