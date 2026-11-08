@@ -131,7 +131,6 @@ export async function GET(request: Request) {
       style={{
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
         position: "absolute",
         left: 72,
         right: 72,
@@ -148,9 +147,9 @@ export async function GET(request: Request) {
           </div>
         )}
       </div>
-      <div style={{ display: "flex", fontFamily: "Body", fontSize: 24, color: t.dim, letterSpacing: 2 }}>
-        {total > 1 ? `${index} / ${total}` : ""}
-      </div>
+      {/* No "3 / 8" here. Instagram already draws its own dots under a
+          carousel, so a printed counter is the same information twice, and
+          the bar across the top carries it without spelling it out. */}
     </div>
   );
 
@@ -265,7 +264,7 @@ export async function GET(request: Request) {
         { name: "Body", data: f.body, weight: 600, style: "normal" },
         { name: "Body", data: f.heavy, weight: 800, style: "normal" },
       ],
-      headers: { "Cache-Control": "private, max-age=86400" },
+      headers: { "Cache-Control": "private, max-age=300" },
     },
   );
 }
