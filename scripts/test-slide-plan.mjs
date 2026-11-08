@@ -33,10 +33,13 @@ function reconcile(plan, slideCount, photoIds = []) {
     slides: base.slides.map((d, i) => {
       const kept = plan.slides[i];
       if (!kept) return d;
+      const layout = kept.layout ?? d.layout;
+      const wantsPhoto = layout !== "plain";
       return {
-        layout: kept.layout ?? d.layout,
-        photoId: typeof kept.photoId === "number" ? kept.photoId
-          : "photoId" in kept ? null : d.photoId,
+        layout,
+        photoId: wantsPhoto
+          ? (typeof kept.photoId === "number" ? kept.photoId : d.photoId)
+          : null,
         accent: typeof kept.accent === "string" ? kept.accent : "",
       };
     }),
@@ -68,7 +71,20 @@ ok("an empty bank gives empty slots, not a crash", defaultPlan(3, []).slides.eve
 const chosen = {theme:"night", slides:[{layout:"full",photoId:99,accent:"hey"},{layout:"plain",photoId:null,accent:""}]};
 const r = reconcile(chosen, 2, bank);
 ok("a chosen photo is kept", r.slides[0].photoId===99, String(r.slides[0].photoId));
-ok("a deliberate no-photo is kept", r.slides[1].photoId===null, String(r.slides[1].photoId));
+ok("a text-only slide carries no photo", r.slides[1].photoId===null, String(r.slides[1].photoId));
+
+// The case that was leaving old carousels empty: a plan saved before
+// photos existed has nulls everywhere, and must now fill in.
+const stale = {theme:"riseup", slides:[
+  {layout:"portrait",photoId:null,accent:""},
+  {layout:"band",photoId:null,accent:""},
+  {layout:"full",photoId:null,accent:""},
+]};
+const healed = reconcile(stale, 3, bank);
+ok("a plan from before photos existed fills itself in",
+  healed.slides.every(s=>s.photoId!==null), JSON.stringify(healed.slides.map(s=>s.photoId)));
+ok("...without repeating a photo", new Set(healed.slides.map(s=>s.photoId)).size===3,
+  JSON.stringify(healed.slides.map(s=>s.photoId)));
 ok("the chosen theme is kept", r.theme==="night", r.theme);
 
 // A rewrite that adds slides fills the new ones from the bank.
