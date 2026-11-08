@@ -56,7 +56,7 @@ export default async function AutopsyPage() {
             </table>
           </div>
           <p className="mt-2 text-xs text-faint">
-            Tag posts with a pillar from their post page to fill this in -- untagged posts group under &quot;Untagged&quot;.
+            Tag posts with a pillar from their post page to fill this in. Untagged posts group under &quot;Untagged&quot;.
           </p>
         </section>
       )}

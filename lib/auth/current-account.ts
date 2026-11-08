@@ -21,7 +21,7 @@ export async function requireAccountId(): Promise<number> {
   if (!session) {
     throw new Error(
       "requireAccountId() found no valid session. This should be unreachable " +
-        "behind middleware -- check that the route is covered by the matcher " +
+        "behind middleware. Check that the route is covered by the matcher " +
         "in middleware.ts.",
     );
   }

@@ -62,7 +62,7 @@ export default function TermsPage() {
           The analysis, scripts, and suggestions are machine-generated. They can
           be wrong, and they are not advice. You are responsible for reviewing
           anything before you publish it, and for making sure it complies with
-          whatever rules apply to you -- including, if you work in a regulated
+          whatever rules apply to you, including, if you work in a regulated
           field such as mortgage lending or real estate, your own licensing and
           advertising requirements.
         </p>
@@ -96,7 +96,7 @@ export default function TermsPage() {
 
       <Section heading="Ending your use">
         <p>
-          You may stop and delete your account at any time -- see{" "}
+          You may stop and delete your account at any time. See{" "}
           <Link href="/data-deletion" className="text-accent hover:underline">
             the deletion page
           </Link>

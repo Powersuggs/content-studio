@@ -52,7 +52,7 @@ export default async function InstagramConnection() {
         <ConnectButton label="Connect Instagram" />
         <p className="text-xs text-faint">
           You will be sent to Instagram to approve it. Approve both permissions
-          it asks for -- without the insights one, views, reach, and saves
+          it asks for. Without the insights one, views, reach, and saves
           come back empty.
         </p>
       </Panel>
@@ -101,7 +101,7 @@ export default async function InstagramConnection() {
           label="Access expires"
           value={
             !connection.expiresAt
-              ? "Unknown -- will be set at the next refresh"
+              ? "Unknown until the next refresh"
               : expired
                 ? "Expired"
                 : `${connection.expiresAt.toLocaleDateString()} (${daysLeft} day${daysLeft === 1 ? "" : "s"} left)`
@@ -117,7 +117,7 @@ export default async function InstagramConnection() {
       {expired && (
         <Notice tone="warn">
           The access Instagram granted has run out, so syncing has stopped.
-          Reconnect to start it again -- your existing posts and metrics
+          Reconnect to start it again. Your existing posts and metrics
           are untouched.
         </Notice>
       )}

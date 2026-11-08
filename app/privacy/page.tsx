@@ -39,7 +39,7 @@ export default function PrivacyPage() {
           items={[
             "your Instagram user ID, username, display name, biography, and follower and media counts",
             "your posts: captions, media URLs, thumbnails, and the date each was published",
-            "the metrics Instagram reports for each post -- views, likes, comments, shares, saves, reach, and average watch time",
+            "the metrics Instagram reports for each post: views, likes, comments, shares, saves, reach, and average watch time",
           ]}
         />
         <p>
@@ -49,7 +49,7 @@ export default function PrivacyPage() {
         <p>
           <strong className="text-text">What you create here.</strong> Scripts,
           hooks, notes, boards, and the voice profile built from your answers to
-          the interview questions -- including the audio you record, if you use
+          the interview questions, including the audio you record, if you use
           the microphone, which is transcribed and then discarded as audio.
         </p>
       </Section>
@@ -72,24 +72,24 @@ export default function PrivacyPage() {
         <Bullets
           items={[
             <>
-              <strong className="text-text">Supabase</strong> -- hosts the
+              <strong className="text-text">Supabase</strong> hosts the
               database where everything above is stored.
             </>,
             <>
-              <strong className="text-text">Vercel</strong> -- hosts and serves
+              <strong className="text-text">Vercel</strong> hosts and serves
               the application itself.
             </>,
             <>
-              <strong className="text-text">Anthropic (Claude)</strong> --
-              receives your post captions, metrics, and voice profile when you
+              <strong className="text-text">Anthropic (Claude)</strong> receives
+              your post captions, metrics, and voice profile when you
               ask for analysis or a draft, in order to generate it.
             </>,
             <>
-              <strong className="text-text">Groq</strong> -- receives voice
+              <strong className="text-text">Groq</strong> receives voice
               recordings you make in the app, to transcribe them to text.
             </>,
             <>
-              <strong className="text-text">Meta / Instagram</strong> -- the
+              <strong className="text-text">Meta / Instagram</strong> is the
               source of the Instagram data, contacted with the token you
               granted.
             </>,
@@ -106,7 +106,7 @@ export default function PrivacyPage() {
           Your account data and what you create here are kept while your account
           is open. Instagram-derived data is kept until you disconnect
           Instagram or request deletion. Access tokens expire on
-          Instagram&apos;s schedule -- currently 60 days -- and are refreshed
+          Instagram&apos;s schedule, currently 60 days, and are refreshed
           while your connection is active.
         </p>
       </Section>

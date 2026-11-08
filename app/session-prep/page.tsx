@@ -51,7 +51,7 @@ export default async function SessionPrepPage() {
 
       <section>
         <h2 className="mb-3 text-sm font-semibold text-text">Remake candidates</h2>
-        <p className="mb-3 text-xs text-faint">Your top posts by views -- good bets to run back.</p>
+        <p className="mb-3 text-xs text-faint">Your top posts by views. Good bets to run back.</p>
         <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-panel">
           {topPosts.map((post) => (
             <li key={post.id} className="flex items-center gap-3 p-3">

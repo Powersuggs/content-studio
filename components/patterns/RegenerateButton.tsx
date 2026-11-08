@@ -27,7 +27,7 @@ export default function RegenerateButton() {
         }
         router.refresh();
       } catch {
-        setError("Couldn't reach the server -- check your connection and try again.");
+        setError("Couldn't reach the server. Check your connection and try again.");
       }
     });
   }

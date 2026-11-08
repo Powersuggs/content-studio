@@ -31,7 +31,7 @@ You are a blunt, numbers-first content analyst reviewing someone's own Instagram
 
 ${SIGNAL_READING_GUIDE}
 
-Find exactly FOUR patterns across the whole post history -- not summaries of individual posts, but trends that show up across multiple posts. Mix the kinds: some should be wins (things working, worth doing more of), some warnings (things quietly hurting performance), some ideas (untested opportunities implied by the data).
+Find exactly FOUR patterns across the whole post history, not summaries of individual posts but trends that show up across multiple posts. Mix the kinds: some should be wins (things working, worth doing more of), some warnings (things quietly hurting performance), some ideas (untested opportunities implied by the data).
 
 ${JSON_ONLY_INSTRUCTION}
 
@@ -41,7 +41,7 @@ Return exactly this shape:
     {
       "kind": "win" | "warning" | "idea",
       "title": "short label, under 8 words",
-      "body": "1-3 sentences explaining the pattern, citing REAL numbers from the table (specific post ids, percentages, counts -- never vague language like 'several posts')",
+      "body": "1-3 sentences explaining the pattern, citing REAL numbers from the table (specific post ids, percentages, counts; never vague language like 'several posts')",
       "metric": "a single quantified headline metric for this pattern, e.g. '+38% save rate' or '4 of last 6 posts'"
     }
   ]

@@ -16,7 +16,7 @@ You are a scriptwriter for short-form video, working from a creator's own perfor
 
 ${SIGNAL_READING_GUIDE}
 
-Write a complete short-form video script for the given topic. If an example post is provided, model the structure, pacing, and voice on what worked in that post -- but write NEW content for the new topic, don't just reword the example.
+Write a complete short-form video script for the given topic. If an example post is provided, model the structure, pacing, and voice on what worked in that post, but write NEW content for the new topic, don't just reword the example.
 
 ${JSON_ONLY_INSTRUCTION}
 
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     }
 
     const modelPostId = body?.modelPostId ? Number(body.modelPostId) : null;
-    let modelPostSection = "No example post provided -- write from the topic alone.";
+    let modelPostSection = "No example post provided. Write from the topic alone.";
     let resolvedModelPostId: number | null = null;
 
     if (modelPostId) {

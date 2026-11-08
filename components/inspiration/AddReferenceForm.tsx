@@ -85,7 +85,7 @@ export default function AddReferenceForm() {
         <div>
           <p className="text-sm font-medium text-text">Add a reference post</p>
           <p className="mt-0.5 text-xs text-muted">
-            Paste a link and whatever you've got -- caption, transcript, or both -- and reverse-engineer it.
+            Paste a link and whatever you've got, caption or transcript or both, and reverse-engineer it.
           </p>
         </div>
         {expanded ? <ChevronUp size={16} className="text-faint" /> : <ChevronDown size={16} className="text-faint" />}
@@ -131,7 +131,7 @@ export default function AddReferenceForm() {
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
               rows={4}
-              placeholder="Paste the spoken words -- e.g. from the platform's own transcript/captions panel"
+              placeholder="Paste the spoken words, for example from the platform's own transcript or captions panel"
               className="mt-1 w-full resize-none rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
             />
           </div>
