@@ -41,7 +41,7 @@ export async function POST() {
       user: alreadyHave
         ? `${suggestUserPrompt(winners, COUNT)}\n\nIdeas already on their list, do not repeat these:\n${alreadyHave}`
         : suggestUserPrompt(winners, COUNT),
-      maxTokens: 4000,
+      maxTokens: 10000,
       useVoice: true,
     });
 
@@ -58,6 +58,15 @@ export async function POST() {
     const explained = explainDbError(err);
     if (explained) return NextResponse.json({ error: explained }, { status: 503 });
     console.error("idea-suggestions failed", err);
-    return NextResponse.json({ error: "Could not suggest ideas." }, { status: 500 });
+    // The reason, not just the fact. A generic "could not suggest ideas"
+    // is the same message whether the token budget ran out, the model
+    // returned prose instead of JSON, or the key is missing, and the only
+    // way to tell them apart is a server log nobody is reading. This is a
+    // single-user app and these messages are operational, not secrets.
+    const why = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      { error: `Could not suggest ideas. ${why}`.trim() },
+      { status: 500 },
+    );
   }
 }
