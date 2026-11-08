@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateJson } from "@/lib/ai/generate-json";
 import { JSON_ONLY_INSTRUCTION } from "@/lib/ai/signals";
-import { getVerifiedFactsGuardrail, saveScript } from "@/lib/queries";
+import { getWritingGuardrail, saveScript } from "@/lib/queries";
 import { saveNewsletter } from "@/lib/newsletter/queries";
 import { getIdeaForGeneration, saveDraft } from "@/lib/ideas/queries";
 import { isFormatId, formatLabel } from "@/lib/ideas/formats";
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "That idea is not there." }, { status: 404 });
     }
 
-    const guardrail = await getVerifiedFactsGuardrail();
+    const guardrail = await getWritingGuardrail();
 
     const result = normalize(
       await generateJson({

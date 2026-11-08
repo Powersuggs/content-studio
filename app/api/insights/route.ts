@@ -91,7 +91,7 @@ export async function POST() {
       const kind = VALID_KINDS.includes(p.kind as InsightKind)
         ? (p.kind as InsightKind)
         : "idea";
-      const content = `${p.title} — ${p.metric}\n${p.body}`;
+      const content = `${p.title}: ${p.metric}\n${p.body}`;
       return { kind, content };
     });
 

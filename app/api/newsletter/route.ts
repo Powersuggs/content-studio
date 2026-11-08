@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateJson } from "@/lib/ai/generate-json";
 import { JSON_ONLY_INSTRUCTION } from "@/lib/ai/signals";
-import { getVerifiedFactsGuardrail } from "@/lib/queries";
+import { getWritingGuardrail } from "@/lib/queries";
 import { saveNewsletter } from "@/lib/newsletter/queries";
 import { explainDbError } from "@/lib/db-errors";
 
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     // Same guardrail the script writer uses: regulated claims get written
     // around rather than invented, which matters more in an email that
     // sits in an inbox than in a video that scrolls past.
-    const guardrail = await getVerifiedFactsGuardrail();
+    const guardrail = await getWritingGuardrail();
 
     const result = await generateJson<NewsletterResponse>({
       system: `${SYSTEM_PROMPT}\n\n${guardrail}`,

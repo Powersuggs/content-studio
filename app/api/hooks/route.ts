@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateJson } from "@/lib/ai/generate-json";
 import { SIGNAL_READING_GUIDE, JSON_ONLY_INSTRUCTION } from "@/lib/ai/signals";
-import { getVerifiedFactsGuardrail } from "@/lib/queries";
+import { getWritingGuardrail } from "@/lib/queries";
 import { explainDbError } from "@/lib/db-errors";
 
 const ARCHETYPES = [
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "topic is required" }, { status: 400 });
     }
 
-    const guardrail = await getVerifiedFactsGuardrail();
+    const guardrail = await getWritingGuardrail();
     const result = await generateJson<HooksResponse>({
       system: `${BASE_SYSTEM_PROMPT}\n\n${guardrail}`,
       user: `Topic: ${topic}`,

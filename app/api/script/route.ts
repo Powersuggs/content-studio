@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateJson } from "@/lib/ai/generate-json";
 import { SIGNAL_READING_GUIDE, JSON_ONLY_INSTRUCTION } from "@/lib/ai/signals";
-import { getMyPostById, saveScript, getVerifiedFactsGuardrail } from "@/lib/queries";
+import { getMyPostById, saveScript, getWritingGuardrail } from "@/lib/queries";
 import { explainDbError } from "@/lib/db-errors";
 
 interface ScriptResponse {
@@ -69,7 +69,7 @@ Topic: ${topic}
 ${modelPostSection}
 `.trim();
 
-    const guardrail = await getVerifiedFactsGuardrail();
+    const guardrail = await getWritingGuardrail();
     const result = await generateJson<ScriptResponse>({
       system: `${BASE_SYSTEM_PROMPT}\n\n${guardrail}`,
       user: userPrompt,
