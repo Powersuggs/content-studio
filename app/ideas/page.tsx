@@ -19,6 +19,7 @@ const FILTERS: { id: IdeaFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "in-progress", label: "In progress" },
   { id: "untouched", label: "Untouched" },
+  { id: "parked", label: "Parked" },
 ];
 
 export default async function IdeasPage({
@@ -128,6 +129,7 @@ export default async function IdeasPage({
           drafts={drafts}
           emptyFilter={filter}
           hasAny={counts.total > 0}
+          parkedView={filter === "parked"}
           photos={photos}
           handle={handle}
         />

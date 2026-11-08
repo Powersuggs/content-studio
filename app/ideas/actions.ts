@@ -5,6 +5,7 @@ import {
   createIdea,
   toggleOutput,
   archiveIdea,
+  unarchiveIdea,
   saveSlidePlan,
 } from "@/lib/ideas/queries";
 import { isFormatId } from "@/lib/ideas/formats";
@@ -34,6 +35,11 @@ export async function toggleOutputAction(
 
 export async function archiveIdeaAction(ideaId: number): Promise<void> {
   await archiveIdea(ideaId);
+  revalidatePath("/ideas");
+}
+
+export async function unarchiveIdeaAction(ideaId: number): Promise<void> {
+  await unarchiveIdea(ideaId);
   revalidatePath("/ideas");
 }
 

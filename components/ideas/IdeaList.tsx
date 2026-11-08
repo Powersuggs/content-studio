@@ -1,9 +1,15 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Archive, Check, Sparkles, Loader2, Copy, RotateCcw, X, ListPlus } from "lucide-react";
+import {
+  Archive, Check, Sparkles, Loader2, Copy, RotateCcw, X, ListPlus, Undo2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { toggleOutputAction, archiveIdeaAction } from "@/app/ideas/actions";
+import {
+  toggleOutputAction,
+  archiveIdeaAction,
+  unarchiveIdeaAction,
+} from "@/app/ideas/actions";
 import { queueScriptAction } from "@/app/scripts/actions";
 import { formatLabel } from "@/lib/ideas/formats";
 import type { Idea, IdeaFilter } from "@/lib/ideas/queries";
@@ -23,6 +29,7 @@ export default function IdeaList({
   drafts,
   emptyFilter,
   hasAny,
+  parkedView = false,
   photos = [],
   handle = null,
 }: {
@@ -30,17 +37,21 @@ export default function IdeaList({
   drafts: Record<number, DraftView[]>;
   emptyFilter: IdeaFilter;
   hasAny: boolean;
+  /** Showing the shelf rather than the list, so the controls flip. */
+  parkedView?: boolean;
   photos?: PhotoChoice[];
   handle?: string | null;
 }) {
   if (ideas.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border p-6 text-sm text-faint">
-        {!hasAny
-          ? "No ideas yet. Put the first one in the box above, even if it is half an idea."
-          : emptyFilter === "untouched"
-            ? "Nothing untouched. Every idea has produced something."
-            : "Nothing in progress. Start a format on an idea below."}
+        {emptyFilter === "parked"
+          ? "Nothing parked. Ideas you put aside wait here until you want them back."
+          : !hasAny
+            ? "No ideas yet. Put the first one in the box above, even if it is half an idea."
+            : emptyFilter === "untouched"
+              ? "Nothing untouched. Every idea has produced something."
+              : "Nothing in progress. Start a format on an idea below."}
       </div>
     );
   }
@@ -54,6 +65,7 @@ export default function IdeaList({
           drafts={drafts[idea.id] ?? []}
           photos={photos}
           handle={handle}
+          parked={parkedView}
         />
       ))}
     </ul>
@@ -65,10 +77,12 @@ function IdeaCard({
   drafts,
   photos,
   handle,
+  parked = false,
 }: {
   idea: Idea;
   drafts: DraftView[];
   photos: PhotoChoice[];
+  parked?: boolean;
   handle: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -123,12 +137,17 @@ function IdeaCard({
         </div>
         <button
           type="button"
-          onClick={() => startTransition(async () => { await archiveIdeaAction(idea.id); })}
+          onClick={() =>
+            startTransition(async () => {
+              if (parked) await unarchiveIdeaAction(idea.id);
+              else await archiveIdeaAction(idea.id);
+            })
+          }
           disabled={isPending}
-          title="Park this idea"
-          className="shrink-0 rounded-lg border border-border p-1.5 text-faint transition-colors hover:border-warn hover:text-warn disabled:opacity-40"
+          title={parked ? "Put it back on the list" : "Park this idea. It goes to the Parked tab, not away"}
+          className="shrink-0 rounded-lg border border-border p-1.5 text-faint transition-colors hover:border-accent hover:text-accent disabled:opacity-40"
         >
-          <Archive size={13} strokeWidth={1.75} />
+          {parked ? <Undo2 size={13} strokeWidth={1.75} /> : <Archive size={13} strokeWidth={1.75} />}
         </button>
       </div>
 
@@ -368,13 +387,7 @@ function DraftPanel({
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={onRemove}
-        className="text-[11px] text-faint underline underline-offset-2 hover:text-warn"
-      >
-        Not made after all, untick it
-      </button>
+      <UntickDraft hasWriting={Boolean(draft?.content)} onRemove={onRemove} />
     </div>
   );
 }
@@ -442,5 +455,73 @@ function SendToSessionMode({
       <ListPlus size={11} strokeWidth={2} />
       {isPending ? "Sending" : "Send to Session Mode"}
     </button>
+  );
+}
+
+/**
+ * Removing a format from an idea, with a stop on the way.
+ *
+ * This deletes the row, and the row is where the writing lives. One
+ * stray click used to throw away a finished carousel: eight slides, the
+ * caption, the layout and photo choices, and the minute it took to
+ * generate. There is no undo and nothing to restore from.
+ *
+ * So it asks, and it says what goes. The confirm is skipped when the
+ * tick is only a tick, because there is nothing to lose there and a
+ * dialog over nothing is how people learn to click through dialogs.
+ */
+function UntickDraft({
+  hasWriting,
+  onRemove,
+}: {
+  hasWriting: boolean;
+  onRemove: () => void;
+}) {
+  const [asking, setAsking] = useState(false);
+
+  if (!hasWriting) {
+    return (
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-[11px] text-faint underline underline-offset-2 hover:text-warn"
+      >
+        Not made after all, untick it
+      </button>
+    );
+  }
+
+  if (!asking) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAsking(true)}
+        className="text-[11px] text-faint underline underline-offset-2 hover:text-warn"
+      >
+        Not made after all, untick it
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[11px]">
+      <span className="text-warn">
+        This deletes the writing too, and it cannot be brought back.
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="rounded-full border border-warn px-2 py-0.5 text-warn hover:bg-warn hover:text-bg"
+      >
+        Delete it
+      </button>
+      <button
+        type="button"
+        onClick={() => setAsking(false)}
+        className="rounded-full border border-border px-2 py-0.5 text-muted hover:border-accent hover:text-accent"
+      >
+        Keep it
+      </button>
+    </div>
   );
 }
