@@ -45,7 +45,7 @@ export async function generateJson<T = unknown>(
 
   if (message.stop_reason === "max_tokens") {
     throw new Error(
-      "Model response was cut off at the token limit before finishing -- raise maxTokens for this route.",
+      "The model ran out of room before it finished writing. This route's token budget is too small for what it was asked to produce.",
     );
   }
 
