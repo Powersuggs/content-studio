@@ -263,7 +263,7 @@ function toDraft(r: DraftRow): OutputDraft {
   let content: GeneratedOutput | null = null;
   if (r.content) {
     try {
-      content = normalize(JSON.parse(r.content));
+      content = normalize(JSON.parse(r.content), r.format as FormatId);
     } catch {
       // Hand-edited or written by an older shape. A draft that will not
       // parse should show as a plain tick, not take the page down.

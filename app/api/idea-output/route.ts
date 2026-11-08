@@ -52,6 +52,7 @@ export async function POST(request: Request) {
         maxTokens: maxTokensFor(format),
         useVoice: true,
       }),
+      format,
     );
 
     if (!result) {

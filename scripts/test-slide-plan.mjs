@@ -58,6 +58,39 @@ const kindOf = (id) => bank.find((p) => p.id === id)?.kind;
 const p8 = defaultPlan(8, bank);
 ok("every slide gets a photo", p8.slides.every((s) => s.photoId !== null),
   JSON.stringify(p8.slides.map((s) => s.photoId)));
+
+// The deck opens and closes on a face. A carousel is a swipe toward an
+// ask, and an ask delivered by a coffee cup is weaker than one delivered
+// by the person making it. The middle slides stay varied.
+ok("THE DECK OPENS ON A PERSON", kindOf(p8.slides[0].photoId) === "person",
+  `slide 1 got ${kindOf(p8.slides[0].photoId)}`);
+ok("AND CLOSES ON A PERSON", kindOf(p8.slides[7].photoId) === "person",
+  `slide 8 got ${kindOf(p8.slides[7].photoId)}`);
+ok("the two bookends are not the same photo",
+  p8.slides[0].photoId !== p8.slides[7].photoId,
+  `both got ${p8.slides[0].photoId}`);
+
+// One person in the bank is the hard case: the cover should still get
+// them, and the closer takes a repeat rather than leaving a gap.
+const onePerson = [
+  { id: 1, kind: "person" }, { id: 2, kind: "scene" }, { id: 3, kind: "scene" },
+  { id: 4, kind: "scene" }, { id: 5, kind: "scene" },
+];
+const solo = defaultPlan(6, onePerson);
+ok("with one person in the bank the cover still gets them",
+  solo.slides[0].photoId === 1, `cover got ${solo.slides[0].photoId}`);
+ok("and no slide is left empty", solo.slides.every((s) => s.photoId !== null),
+  JSON.stringify(solo.slides.map((s) => s.photoId)));
+
+// No people at all must not break anything: the bookends fall back to
+// whatever the side layout accepts rather than coming back blank.
+const noPeople = [
+  { id: 20, kind: "scene" }, { id: 21, kind: "scene" }, { id: 22, kind: "scene" },
+];
+const faceless = defaultPlan(6, noPeople);
+ok("a bank with no people still fills the bookends",
+  faceless.slides[0].photoId !== null && faceless.slides[5].photoId !== null,
+  JSON.stringify(faceless.slides.map((s) => s.photoId)));
 ok("no photo repeats within a deck",
   new Set(p8.slides.map((s) => s.photoId)).size === 8,
   JSON.stringify(p8.slides.map((s) => s.photoId)));
