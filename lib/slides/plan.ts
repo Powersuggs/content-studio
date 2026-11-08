@@ -29,28 +29,41 @@ export interface CarouselPlan {
  *
  * The cover gets a portrait layout because a face is the strongest way to
  * open, the closing slide matches it so the deck bookends, and the middle
- * alternates between a photo and plain text. Alternating matters: eight
- * photo slides in a row is as monotonous as eight plain ones, and the
- * rhythm is most of what makes a deck feel designed.
+ * alternates between a band and a full bleed. Alternating matters: eight
+ * identical compositions is what makes a deck look like a template, and
+ * the rhythm is most of what makes one look designed.
  *
- * No photo is chosen. Guessing which picture suits which sentence, with
- * nothing but a filename to go on, produces worse results than an empty
- * slot that asks to be filled.
+ * Every slide starts with a photograph on it. An earlier version left the
+ * slots empty, on the reasoning that guessing from a filename gets it
+ * wrong; that was the wrong call. A default you glance at and change is
+ * far less work than eight blanks you must fill, and being wrong is
+ * obvious the moment you see it.
  */
-export function defaultPlan(slideCount: number): CarouselPlan {
+export function defaultPlan(slideCount: number, photoIds: number[] = []): CarouselPlan {
   const slides: SlidePlan[] = [];
+  // Walked in order and never repeated within one deck. The list arrives
+  // least-used first, so a new carousel reaches for the photographs that
+  // have had the least airtime, and the bank rotates itself instead of
+  // the same three shots appearing in everything.
+  let next = 0;
+  const take = () => (photoIds.length ? photoIds[next++ % photoIds.length] : null);
+
   for (let i = 0; i < slideCount; i++) {
     const isFirst = i === 0;
     const isLast = i === slideCount - 1;
-    const layout: LayoutId = isFirst || isLast ? "portrait" : i % 2 === 1 ? "band" : "plain";
-    slides.push({ layout, photoId: null, accent: "" });
+    const layout: LayoutId = isFirst || isLast ? "portrait" : i % 2 === 1 ? "band" : "full";
+    slides.push({ layout, photoId: take(), accent: "" });
   }
   return { theme: "riseup", slides };
 }
 
 /** Grows or trims a stored plan to match a draft that has been rewritten. */
-export function reconcile(plan: CarouselPlan | null, slideCount: number): CarouselPlan {
-  const base = defaultPlan(slideCount);
+export function reconcile(
+  plan: CarouselPlan | null,
+  slideCount: number,
+  photoIds: number[] = [],
+): CarouselPlan {
+  const base = defaultPlan(slideCount, photoIds);
   if (!plan?.slides?.length) return base;
   return {
     theme: typeof plan.theme === "string" ? plan.theme : base.theme,
@@ -59,7 +72,14 @@ export function reconcile(plan: CarouselPlan | null, slideCount: number): Carous
       if (!kept) return d;
       return {
         layout: (kept.layout ?? d.layout) as LayoutId,
-        photoId: typeof kept.photoId === "number" ? kept.photoId : null,
+        // A stored null is a deliberate "no photo"; an absent field is a
+        // slide the plan predates, which should get the default.
+        photoId:
+          typeof kept.photoId === "number"
+            ? kept.photoId
+            : "photoId" in kept
+              ? null
+              : d.photoId,
         accent: typeof kept.accent === "string" ? kept.accent : "",
       };
     }),

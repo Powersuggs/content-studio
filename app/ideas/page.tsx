@@ -2,6 +2,7 @@ import {
   listIdeas,
   countIdeas,
   listDraftsForIdeas,
+  photoUsage,
   type IdeaFilter,
 } from "@/lib/ideas/queries";
 import IdeaCapture from "@/components/ideas/IdeaCapture";
@@ -60,7 +61,21 @@ export default async function IdeasPage({
     [] as Awaited<ReturnType<typeof listPhotos>>,
     "ideas",
   );
-  const photos = photoRows.map((p) => ({ id: p.id, label: p.label }));
+  // Least used first, so a new carousel reaches for the photographs that
+  // have had the least airtime. Ties break on the oldest, which means a
+  // freshly uploaded batch does not crowd out everything already there.
+  const [usage] = await safeLoad(
+    () => photoUsage(),
+    new Map<number, number>(),
+    "ideas",
+  );
+  const photos = [...photoRows]
+    .sort((a, b) => {
+      const ua = usage.get(a.id) ?? 0;
+      const ub = usage.get(b.id) ?? 0;
+      return ua !== ub ? ua - ub : a.id - b.id;
+    })
+    .map((p) => ({ id: p.id, label: p.label, uses: usage.get(p.id) ?? 0 }));
   const [handle] = await safeLoad(() => getMyHandle(), null as string | null, "ideas");
 
   const setupError = ideasError;

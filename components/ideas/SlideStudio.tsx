@@ -14,6 +14,8 @@ import { saveSlidePlanAction } from "@/app/ideas/actions";
 export interface PhotoChoice {
   id: number;
   label: string | null;
+  /** How many slides already use it. Drives the default ordering. */
+  uses: number;
 }
 
 /**
@@ -48,8 +50,11 @@ export default function SlideStudio({
   initialPlan: CarouselPlan | null;
 }) {
   const lines = useMemo(() => [title, ...parts].filter(Boolean), [title, parts]);
+  // photos arrives least-used first, so handing the ids straight through
+  // is what makes a new carousel rotate through the bank.
+  const photoIds = useMemo(() => photos.map((p) => p.id), [photos]);
   const [plan, setPlan] = useState<CarouselPlan>(() =>
-    reconcile(initialPlan, lines.length),
+    reconcile(initialPlan, lines.length, photoIds),
   );
   const [active, setActive] = useState(0);
   const [saved, setSaved] = useState(false);
@@ -246,6 +251,7 @@ export default function SlideStudio({
                 {photos.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label || `Photo ${p.id}`}
+                    {p.uses > 0 ? `  (used ${p.uses}\u00d7)` : ""}
                   </option>
                 ))}
               </select>
