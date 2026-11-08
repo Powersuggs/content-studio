@@ -116,11 +116,14 @@ check("and the fields inside it were cleaned", parsed?.caption,
 // ------------------------------------------------------------------ prompt
 truthy("the prompt block states the real R.I.S.E. expansion",
   HOUSE_RULES.includes("Reach, Influence, Scale, Elevate"));
+truthy("and allows the second word he also uses",
+  HOUSE_RULES.includes("Impact"));
 truthy("the prompt block names the retired name so the model avoids it",
   HOUSE_RULES.includes("Rise Up Realty"));
 truthy("the prompt block names the live team",
   HOUSE_RULES.includes("Rise Up Team"));
 check("R.I.S.E. is four words", BRAND.rise.length, 4);
+check("with one alternate for the second", BRAND.riseAlternate, "Impact");
 
 console.log(
   failed === 0 ? "\nhouse rules: all checks passed." : `\nhouse rules: ${failed} FAILED.`,
