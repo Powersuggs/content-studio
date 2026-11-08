@@ -24,8 +24,16 @@
 export const BRAND = {
   team: "Rise Up Team",
   brokerage: "eXp Realty",
-  /** What R.I.S.E. actually stands for. Confirmed, not inferred. */
+  /**
+   * What R.I.S.E. actually stands for. Confirmed by Aaron, not inferred.
+   *
+   * The second word is interchangeable: he uses Influence and Impact and
+   * counts both as correct. So the rule is not "these exact four words",
+   * it is "these four slots, and the second one has two right answers".
+   * Anything else is invented, which is what started this.
+   */
   rise: ["Reach", "Influence", "Scale", "Elevate"],
+  riseAlternate: "Impact",
   /** Names that must never reach a slide, a caption or an email again. */
   retired: ["Rise Up Realty"],
 } as const;
@@ -50,10 +58,11 @@ NAMES
 - "${BRAND.retired[0]}" is a retired name. It must never appear: not in body
   text, not in a hashtag, not in a sign-off. Neither must the hashtag form of
   it.
-- R.I.S.E. stands for ${BRAND.rise.join(", ")}. Use exactly those four words
-  when expanding it, or do not expand it at all. Never invent a different
-  expansion, and never present an expansion as the team's own wording unless
-  it is that one.
+- R.I.S.E. stands for ${BRAND.rise.join(", ")}. The second word is
+  interchangeable: ${BRAND.rise[1]} or ${BRAND.riseAlternate}, both are his and
+  either may be used. Expand it that way or do not expand it at all. Never
+  invent a different expansion, and never present one as the team's own
+  wording unless it is this one.
 `.trim();
 
 // ---------------------------------------------------------------------
