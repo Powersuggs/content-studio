@@ -41,14 +41,14 @@ const SPECS: Record<FormatId, FormatSpec> = {
     brief: `A short vertical video script, spoken to camera.
 
 The viewer did not choose this. It arrived, and the first line decides whether they stay. Write the hook as the first words out of the mouth, not a title card. Spoken rhythm, short sentences, no clauses someone would trip over reading aloud. 30 to 45 seconds, which is roughly 90 to 130 words of actual speech. End on one clear thing to do.`,
-    shape: `{"title":"the hook, the literal first words spoken","parts":[],"body":"the full script as it would be said out loud, including the hook","caption":"the Instagram caption, 1-3 short lines plus a question","notes":"one line of delivery direction, e.g. where to pause or hold up a hand"}`,
+    shape: `{"title":"the hook, the literal first words spoken","parts":[],"body":"the full script as it would be said out loud, including the hook","caption":"the Instagram caption, 1-3 short lines plus a question, at most 3 hashtags","notes":"one line of delivery direction, e.g. where to pause or hold up a hand"}`,
     maxTokens: 3000,
   },
   short: {
     brief: `A YouTube Short or TikTok cut, spoken to camera.
 
 Same job as a reel but a colder audience: more of these viewers have never seen this person before, so the first line has to make sense with no context at all. No in-jokes, no "as I said last week". 25 to 40 seconds. End on a reason to follow rather than a reason to DM, because that is what this surface rewards.`,
-    shape: `{"title":"the hook, the literal first words spoken","parts":[],"body":"the full script as it would be said out loud","caption":"a one-line caption plus 3-5 plain hashtags","notes":"one line of delivery direction"}`,
+    shape: `{"title":"the hook, the literal first words spoken","parts":[],"body":"the full script as it would be said out loud","caption":"a one-line caption plus at most 3 plain hashtags","notes":"one line of delivery direction"}`,
     maxTokens: 3000,
   },
   carousel: {
@@ -57,7 +57,7 @@ Same job as a reel but a colder audience: more of these viewers have never seen 
 This is read, not heard, and the reader already stopped scrolling to look. That buys you depth a reel cannot have, but every slide has to earn the swipe to the next one. Slide one is the hook and should state the promise plainly. Middle slides carry one idea each, in as few words as fit on a phone screen: aim for 12 to 30 words per slide, never a paragraph. The last slide is the ask.
 
 6 to 8 slides. Write what goes ON the slide, not a description of the slide.`,
-    shape: `{"title":"the text on slide 1, the hook","parts":["slide 2 text","slide 3 text","..."],"body":"","caption":"the Instagram caption that sits under the carousel","notes":"one line on the visual treatment, e.g. big numbers, one per slide"}`,
+    shape: `{"title":"the text on slide 1, the hook","parts":["slide 2 text","slide 3 text","..."],"body":"","caption":"the Instagram caption under the carousel, at most 3 hashtags","notes":"one line on the visual treatment, e.g. big numbers, one per slide"}`,
     maxTokens: 3000,
   },
   story: {
@@ -108,6 +108,11 @@ RULES
 - Concrete over general: a number, a case, a thing that actually happened, beats a principle.
 - If the idea is too broad for one piece, pick the strongest angle in it and commit to that. Say which angle you took in notes.
 - No emoji unless the voice profile shows they use them.
+- HASHTAGS: at most THREE, ever, and only in the caption field. Never four. Never a
+  block of them at the end. If a format has no caption, use none at all. Pick the three
+  that a real person searching for this would actually type, not the three with the
+  biggest follower counts. A wall of hashtags reads as someone hoping to be found
+  rather than someone worth finding.
 
 ${jsonOnly}
 
@@ -118,6 +123,38 @@ ${spec.shape}
 
 export function maxTokensFor(format: FormatId): number {
   return SPECS[format].maxTokens;
+}
+
+/**
+ * The ceiling on hashtags, enforced rather than requested.
+ *
+ * The prompt asks for three. A prompt is a strong suggestion, and the model
+ * returned twenty-five the first time it was asked nicely, because every
+ * caption it has ever seen ends in a block of them. So the rule is applied
+ * to the output as well: whatever comes back, only the first three survive.
+ */
+export const MAX_HASHTAGS = 3;
+
+/**
+ * Keeps the first few hashtags and drops the rest.
+ *
+ * Order matters: the model puts its best guesses first, so taking from the
+ * front keeps the ones it thought were most relevant. Hashtags inline in a
+ * sentence ("this is why #RISE works") are left where they are and still
+ * counted, because removing one mid-sentence would break the sentence.
+ */
+export function capHashtags(caption: string, max = MAX_HASHTAGS): string {
+  const tag = /#[A-Za-z0-9_]+/g;
+  let seen = 0;
+  const kept = caption.replace(tag, (m) => (++seen <= max ? m : ""));
+  // Tidy the gaps left behind: runs of spaces, spaces before punctuation,
+  // and the trailing whitespace a stripped block leaves at the end.
+  return kept
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+([.,!?])/g, "$1")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /** Normalizes whatever came back, so a missing field cannot crash a render. */
@@ -132,5 +169,11 @@ export function normalize(raw: unknown): GeneratedOutput | null {
     : [];
   // A result with no title AND nothing in it is a failure, not a draft.
   if (!title && !body && parts.length === 0) return null;
-  return { title, parts, body, caption: str(r.caption), notes: str(r.notes) };
+  return {
+    title,
+    parts,
+    body,
+    caption: capHashtags(str(r.caption)),
+    notes: str(r.notes),
+  };
 }
