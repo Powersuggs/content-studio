@@ -53,22 +53,45 @@ export function defaultPlan(slideCount: number, photos: PhotoRef[] = []): Carous
   // offered to a layout that can actually hold it. Dropping a headshot
   // into the band crops it to shoulders and chin, which is not a matter
   // of taste but an unusable slide.
-  const take = (layout: LayoutId): number | null => {
-    const fit = photos.find((p) => !taken.has(p.id) && layoutAccepts(layout, p.kind));
+  //
+  // `prefer` asks for a kind without demanding it. The cover and the
+  // closing slide are where a face does the most work: the first decides
+  // whether anyone swipes, the last is where the ask lands, and an ask
+  // from a person is a different thing from an ask from a coffee cup. The
+  // middle slides carry ideas, and a face on every one of them would be
+  // the same slide eight times.
+  const take = (layout: LayoutId, prefer?: PhotoKind): number | null => {
+    const unused = (kind?: PhotoKind) =>
+      photos.find(
+        (p) =>
+          !taken.has(p.id) &&
+          layoutAccepts(layout, p.kind) &&
+          (kind === undefined || p.kind === kind),
+      );
+    // Preferred and unused, then unused of any kind this layout accepts.
+    const fit = (prefer && unused(prefer)) || unused();
     if (fit) {
       taken.add(fit.id);
       return fit.id;
     }
-    // Nothing unused fits, so reuse the least-used one that does. A
-    // repeat is better than an empty frame.
-    return photos.find((p) => layoutAccepts(layout, p.kind))?.id ?? null;
+    // Nothing unused fits, so reuse one that does, still favouring the
+    // preferred kind. A repeat is better than an empty frame.
+    const reuse =
+      (prefer && photos.find((p) => layoutAccepts(layout, p.kind) && p.kind === prefer)) ||
+      photos.find((p) => layoutAccepts(layout, p.kind));
+    return reuse?.id ?? null;
   };
 
   for (let i = 0; i < slideCount; i++) {
     const isFirst = i === 0;
     const isLast = i === slideCount - 1;
-    const layout: LayoutId = isFirst || isLast ? "portrait" : i % 2 === 1 ? "band" : "full";
-    slides.push({ layout, photoId: take(layout), accent: "" });
+    const bookend = isFirst || isLast;
+    const layout: LayoutId = bookend ? "portrait" : i % 2 === 1 ? "band" : "full";
+    slides.push({
+      layout,
+      photoId: take(layout, bookend ? "person" : undefined),
+      accent: "",
+    });
   }
   return { theme: "riseup", slides };
 }
