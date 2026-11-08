@@ -98,6 +98,19 @@ ok("the prompt says these are not the most viewed posts",
   /NOT the most viewed/.test(SUGGEST_SYSTEM), "the reasoning is missing");
 ok("the prompt refuses a format as an idea",
   /is not an\s+idea/.test(SUGGEST_SYSTEM), "nothing stops it returning formats");
+ok("THE PROMPT FORBIDS INVENTING HIS MEMORIES",
+  /NEVER INVENT THEIR LIFE/.test(SUGGEST_SYSTEM), "nothing stops it making things up");
+ok("and shows the difference rather than just asserting it",
+  /the call you almost didn't make/.test(SUGGEST_SYSTEM) &&
+    /reads like a memory and is not one/.test(SUGGEST_SYSTEM),
+  "the worked example is missing");
+ok("it names the specifics that must not be invented",
+  /no invented times, places, numbers, quotes, clients, conversations/i.test(
+    SUGGEST_SYSTEM.replace(/\s+/g, " ")),
+  "the list of what not to invent is missing");
+ok("but their own captions are still fair game",
+  /because they wrote it/.test(SUGGEST_SYSTEM), "it may now refuse to use real captions");
+
 ok("the ask names how many are wanted",
   suggestUserPrompt(posts, 8).includes("Propose 8 new ideas"), suggestUserPrompt(posts, 8).slice(-40));
 
