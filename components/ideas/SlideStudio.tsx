@@ -74,6 +74,9 @@ export default function SlideStudio({
   const [phoneFiles, setPhoneFiles] = useState<File[] | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [canSharePhotos, setCanSharePhotos] = useState(false);
+  // Touch means a phone, which means a camera roll. Used for the wording
+  // only: the button works either way.
+  const [onAPhone, setOnAPhone] = useState(false);
   const [, startTransition] = useTransition();
   const firstRun = useRef(true);
 
@@ -126,9 +129,22 @@ export default function SlideStudio({
       handle,
     });
 
-  // Only phones have somewhere to share a photo TO. Asked rather than
-  // guessed from the user agent, with a real file, because a browser that
-  // has navigator.share may still refuse files.
+  // Can this browser hand files to the system at all?
+  //
+  // I first wrote this believing only phones could, and his Chrome on
+  // Windows proved otherwise within a minute of shipping: it shares files
+  // happily, into the Windows share dialog. So the capability decides
+  // whether the button exists, and the pointer decides what it says.
+  // Asked with a real file, because a browser can have navigator.share
+  // and still refuse files.
+  useEffect(() => {
+    try {
+      setOnAPhone(window.matchMedia("(pointer: coarse)").matches);
+    } catch {
+      setOnAPhone(false);
+    }
+  }, []);
+
   useEffect(() => {
     try {
       const probe = new File([new Blob([new Uint8Array([0])])], "probe.png", {
@@ -178,10 +194,13 @@ export default function SlideStudio({
       return;
     }
     setPhoneFiles(files);
+    const again = onAPhone ? "Tap again" : "Click again";
     setDownloadNote(
       files.length < lines.length
-        ? `${files.length} of ${lines.length} slides are ready. Tap again to send them to your photos.`
-        : "Ready. Tap again, then choose Save to Photos.",
+        ? `${files.length} of ${lines.length} slides are ready. ${again} to send them.`
+        : onAPhone
+          ? "Ready. Tap again, then choose Save to Photos."
+          : "Ready. Click again to pick where they go.",
     );
   }
 
@@ -189,12 +208,16 @@ export default function SlideStudio({
     if (!phoneFiles) return;
     try {
       await navigator.share({ files: phoneFiles, title: "Carousel slides" });
-      setDownloadNote("Sent. Choose Save to Photos and they land in your camera roll in order.");
+      setDownloadNote(
+        onAPhone
+          ? "Sent. Choose Save to Photos and they land in your camera roll in order."
+          : "Sent to whatever you picked, in order.",
+      );
     } catch (err) {
       // Dismissing the sheet throws too, and that is not a failure worth
       // shouting about.
       if ((err as Error)?.name !== "AbortError") {
-        setDownloadNote("Your phone would not accept the share. Use Download all instead.");
+        setDownloadNote("That share was refused. Use Download all instead.");
       }
     }
   }
@@ -317,8 +340,12 @@ export default function SlideStudio({
               {preparing
                 ? "Getting them ready"
                 : phoneFiles
-                  ? "Send to Photos"
-                  : "Save to my photos"}
+                  ? onAPhone
+                    ? "Send to Photos"
+                    : "Choose where"
+                  : onAPhone
+                    ? "Save to my photos"
+                    : "Share slides"}
             </button>
           )}
         </div>
