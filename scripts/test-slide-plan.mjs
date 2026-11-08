@@ -70,6 +70,31 @@ ok("the two bookends are not the same photo",
   p8.slides[0].photoId !== p8.slides[7].photoId,
   `both got ${p8.slides[0].photoId}`);
 
+// The middle must not fill up with faces. Photos are walked least-used
+// first, so a bank of fresh headshots is exactly what a full bleed slide
+// reaches for unless it is told to prefer a place. The first real deck
+// built without this came out five faces in eight slides.
+const faces = p8.slides.filter((s) => kindOf(s.photoId) === "person").length;
+ok("ONLY THE TWO BOOKENDS GET A FACE", faces === 2,
+  `${faces} of 8 slides got a person: ${p8.slides.map((s) => kindOf(s.photoId)).join(", ")}`);
+ok("every middle slide gets a place",
+  p8.slides.slice(1, 7).every((s) => kindOf(s.photoId) === "scene"),
+  p8.slides.slice(1, 7).map((s) => kindOf(s.photoId)).join(", "));
+
+// A bank that is nothing but people still has to fill the middle, and a
+// band slide still refuses them, so those slots come back empty rather
+// than cropped.
+const allPeople = [
+  { id: 30, kind: "person" }, { id: 31, kind: "person" }, { id: 32, kind: "person" },
+];
+const crowded = defaultPlan(6, allPeople);
+ok("a bank of nothing but people still fills the bookends",
+  crowded.slides[0].photoId !== null && crowded.slides[5].photoId !== null,
+  JSON.stringify(crowded.slides.map((s) => s.photoId)));
+ok("...and still keeps them out of the band",
+  crowded.slides.every((s) => s.layout !== "band" || s.photoId === null),
+  JSON.stringify(crowded.slides));
+
 // One person in the bank is the hard case: the cover should still get
 // them, and the closer takes a repeat rather than leaving a gap.
 const onePerson = [
