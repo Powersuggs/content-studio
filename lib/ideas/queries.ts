@@ -248,6 +248,14 @@ export interface OutputDraft {
   content: GeneratedOutput | null;
   generatedAt: Date | null;
   scriptId: number | null;
+  /**
+   * Where that script stands: draft, queued, or filmed.
+   *
+   * Carried so the panel can tell the truth about it. Writing a reel
+   * stores a script, but storing one is not the same as putting it in the
+   * teleprompter queue, and the panel used to claim it was.
+   */
+  scriptStatus: string | null;
   newsletterId: number | null;
 }
 
@@ -256,6 +264,7 @@ interface DraftRow {
   content: string | null;
   generated_at: string | null;
   script_id: string | null;
+  script_status: string | null;
   newsletter_id: string | null;
 }
 
@@ -275,6 +284,7 @@ function toDraft(r: DraftRow): OutputDraft {
     content,
     generatedAt: r.generated_at ? new Date(r.generated_at) : null,
     scriptId: r.script_id ? Number(r.script_id) : null,
+    scriptStatus: r.script_status,
     newsletterId: r.newsletter_id ? Number(r.newsletter_id) : null,
   };
 }
@@ -283,10 +293,13 @@ function toDraft(r: DraftRow): OutputDraft {
 export async function listDrafts(ideaId: number): Promise<OutputDraft[]> {
   const accountId = await currentAccountId();
   const rows = await query<DraftRow>(
-    `select format, content, generated_at, script_id, newsletter_id
-       from idea_outputs
-      where account_id = $1 and idea_id = $2
-      order by created_at asc`,
+    `select o.format, o.content, o.generated_at, o.script_id,
+            s.status as script_status, o.newsletter_id
+       from idea_outputs o
+       left join scripts s
+         on s.id = o.script_id and s.account_id = o.account_id
+      where o.account_id = $1 and o.idea_id = $2
+      order by o.created_at asc`,
     [accountId, ideaId],
   );
   return rows.map(toDraft);
@@ -302,10 +315,13 @@ export async function listDraftsForIdeas(
   // One query rather than one per idea: a pipeline of fifty ideas would
   // otherwise be fifty round trips to render a list.
   const rows = await query<DraftRow & { idea_id: string }>(
-    `select idea_id, format, content, generated_at, script_id, newsletter_id
-       from idea_outputs
-      where account_id = $1 and idea_id = any($2::bigint[])
-      order by created_at asc`,
+    `select o.idea_id, o.format, o.content, o.generated_at, o.script_id,
+            s.status as script_status, o.newsletter_id
+       from idea_outputs o
+       left join scripts s
+         on s.id = o.script_id and s.account_id = o.account_id
+      where o.account_id = $1 and o.idea_id = any($2::bigint[])
+      order by o.created_at asc`,
     [accountId, ideaIds],
   );
   for (const r of rows) {
