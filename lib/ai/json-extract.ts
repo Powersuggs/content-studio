@@ -75,7 +75,7 @@ export function extractJson<T = unknown>(raw: string): T {
 
   if (endIdx === -1) {
     throw new Error(
-      "Unbalanced JSON in model output (likely truncated -- check max_tokens)",
+      "The model's answer was not complete JSON, most likely cut off partway through.",
     );
   }
 

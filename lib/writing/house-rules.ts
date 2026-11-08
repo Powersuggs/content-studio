@@ -39,7 +39,7 @@ export const BRAND = {
 } as const;
 
 export const HOUSE_RULES = `
-HOUSE RULES -- these override every other instruction, including the voice profile:
+HOUSE RULES. These override every other instruction, including the voice profile:
 
 PUNCTUATION
 - Never use a dash as punctuation. Not the long em dash character, not the

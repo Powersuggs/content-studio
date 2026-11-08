@@ -23,7 +23,7 @@ export default function DataDeletionPage() {
           you left off.
         </p>
         <p>
-          You can also do this from Instagram&apos;s side -- in the Instagram
+          You can also do this from Instagram&apos;s side, in the Instagram
           app, under <span className="text-text">Settings → Website
           permissions → Apps and websites</span>, remove Content Studio. The
           app is told, and the connection is cleared here automatically.
@@ -35,7 +35,7 @@ export default function DataDeletionPage() {
         <Bullets
           items={[
             "every synced post, caption, and thumbnail reference",
-            "all stored metrics -- views, likes, comments, shares, saves, reach, watch time",
+            "all stored metrics: views, likes, comments, shares, saves, reach, watch time",
             "the AI analysis built from those posts",
             "your Instagram user ID, username, follower and media counts, and the access token",
           ]}
@@ -48,7 +48,7 @@ export default function DataDeletionPage() {
           <strong className="text-text">Two ways to start it.</strong> From
           Instagram: remove Content Studio in{" "}
           <span className="text-text">Settings → Apps and websites</span> and
-          choose the delete option -- Instagram notifies the app, the deletion
+          choose the delete option. Instagram notifies the app, the deletion
           runs, and you are given a confirmation code and a link that shows its
           status. Or email <Mail /> from the address on your account and ask for
           Instagram data deletion; it is done by hand within 30 days, usually
@@ -72,8 +72,8 @@ export default function DataDeletionPage() {
 
       <Section heading="How long it takes">
         <p>
-          Deletions started from Instagram run immediately -- the status page you
-          are given reports when they finish. Requests by email are completed
+          Deletions started from Instagram run immediately, and the status page
+          you are given reports when they finish. Requests by email are completed
           within 30 days, and you get a reply confirming it. Backups are
           overwritten on a rolling 30-day cycle, so a deleted record can persist
           in a backup for up to 30 days before it is gone for good; it is not

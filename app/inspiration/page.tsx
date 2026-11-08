@@ -14,7 +14,7 @@ export default async function InspirationPage() {
       <div>
         <h1 className="text-lg font-semibold text-text">Inspiration</h1>
         <p className="mt-1 text-sm text-muted">
-          Reference posts imported from other creators -- kept separate from your own stats.
+          Reference posts imported from other creators, kept separate from your own stats.
         </p>
       </div>
 

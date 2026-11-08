@@ -212,7 +212,7 @@ export async function getWritingGuardrail(): Promise<string> {
         .map((f) => {
           const source =
             f.source_name || f.source_url
-              ? ` (source: ${[f.source_name, f.source_url].filter(Boolean).join(" -- ")})`
+              ? ` (source: ${[f.source_name, f.source_url].filter(Boolean).join(", ")})`
               : "";
           return `  - ${f.fact}${source}`;
         })
@@ -227,11 +227,11 @@ ${HOUSE_RULES}
 VERIFIED FACTS GUARDRAIL:
 ${
   facts.length > 0
-    ? `The creator has researched and verified the following facts, grouped by topic and each tied to a source. Treat these as ground truth and never contradict them. A fact listed under one topic applies ONLY to that topic -- never carry a number or rule across to a different topic because it sounds similar (one loan program's cap is not another's; one brokerage's split is not another's; one state's licensing requirement is not another's). When a fact has a source you may refer to where it came from in general terms, but do not fabricate a citation beyond what is given:\n${factLines}`
+    ? `The creator has researched and verified the following facts, grouped by topic and each tied to a source. Treat these as ground truth and never contradict them. A fact listed under one topic applies ONLY to that topic. Never carry a number or rule across to a different topic because it sounds similar (one loan program's cap is not another's; one brokerage's split is not another's; one state's licensing requirement is not another's). When a fact has a source you may refer to where it came from in general terms, but do not fabricate a citation beyond what is given:\n${factLines}`
     : "The creator has not entered any verified, sourced facts yet."
 }
 
-For any OTHER specific number, percentage, split, cap, fee, cost, timeline, program rule, earnings figure, or legal or regulatory claim not covered above -- including for a topic with no facts listed at all -- do NOT state it. Do not guess, and do not fall back on general training knowledge for it. Write around it instead, and point the reader at the person or document that can confirm it.
+For any OTHER specific number, percentage, split, cap, fee, cost, timeline, program rule, earnings figure, or legal or regulatory claim not covered above, including for a topic with no facts listed at all, do NOT state it. Do not guess, and do not fall back on general training knowledge for it. Write around it instead, and point the reader at the person or document that can confirm it.
 
 Two kinds of specific deserve extra care:
 - Regulated lending and real estate claims. This is a licensed professional's public content, so a wrong specific is a compliance problem, not just an error.
@@ -471,7 +471,7 @@ export interface PostForAnalysis {
   avg_watch_s: number | null;
 }
 
-/** Full post history, own-handle only, newest first -- fuel for the compact table sent to the insights prompt. */
+/** Full post history, own-handle only, newest first: fuel for the compact table sent to the insights prompt. */
 export async function getPostsForAnalysis(limit = 300): Promise<PostForAnalysis[]> {
   const handle = await requireMyHandle();
   const timezone = DEFAULT_APP_TIMEZONE;
@@ -598,7 +598,7 @@ export interface PostDetail extends PostForAnalysis {
   pillar: string | null;
 }
 
-/** A single post, but ONLY if it belongs to my handle -- reviewing someone else's imported post is not allowed. */
+/** A single post, but ONLY if it belongs to my handle. Reviewing someone else's imported post is not allowed. */
 export async function getMyPostById(postId: number): Promise<PostDetail | null> {
   const handle = await requireMyHandle();
   const timezone = DEFAULT_APP_TIMEZONE;
@@ -1159,7 +1159,7 @@ export interface UpsertPostInput {
   url: string | null;
   thumb_url: string | null;
   caption: string | null;
-  posted_at: string; // YYYY-MM-DD, already resolved (timestamp or decoded ID) -- never "today" as a default
+  posted_at: string; // YYYY-MM-DD, already resolved (timestamp or decoded ID). Never "today" as a default
   views: number;
   likes: number;
   comments: number;

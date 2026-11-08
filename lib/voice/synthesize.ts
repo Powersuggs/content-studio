@@ -17,8 +17,8 @@ const SYSTEM = `
 You build a voice profile: a set of instructions that will be prepended to every future writing task so the output sounds like one specific person rather than like an AI.
 
 You get two kinds of evidence:
-1. INTERVIEW ANSWERS -- what they say about themselves. Often spoken aloud and transcribed, so expect spoken rhythm, false starts and self-corrections. Those are signal, not noise: they show how the person actually constructs a sentence.
-2. THEIR OWN POSTS -- what they actually wrote. This is stronger evidence than anything they claim about themselves, because people are poor witnesses to their own writing. Where the two conflict, trust the posts for HOW they write and the interview for WHAT they believe.
+1. INTERVIEW ANSWERS: what they say about themselves. Often spoken aloud and transcribed, so expect spoken rhythm, false starts and self-corrections. Those are signal, not noise: they show how the person actually constructs a sentence.
+2. THEIR OWN POSTS: what they actually wrote. This is stronger evidence than anything they claim about themselves, because people are poor witnesses to their own writing. Where the two conflict, trust the posts for HOW they write and the interview for WHAT they believe.
 
 Write the profile as direct second-person instructions to a writer. "You open with a question." Not "The user tends to open with questions."
 

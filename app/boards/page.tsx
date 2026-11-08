@@ -21,7 +21,7 @@ export default async function BoardsPage() {
 
       {boards.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-6 text-sm text-faint">
-          No boards yet -- create one above.
+          No boards yet. Create one above.
         </div>
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2">

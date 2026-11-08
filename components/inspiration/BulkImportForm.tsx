@@ -40,7 +40,7 @@ export default function BulkImportForm() {
     setError(null);
     const handleTrim = handle.trim();
     if (!handleTrim) {
-      setError("Enter the creator's handle first -- it applies to every post in this batch.");
+      setError("Enter the creator's handle first. It applies to every post in this batch.");
       return;
     }
     const entries = splitEntries(raw).slice(0, MAX_ITEMS);
@@ -127,7 +127,7 @@ export default function BulkImportForm() {
         <div className="mt-4 space-y-3">
           <p className="text-xs text-faint">
             Note: Instagram doesn&apos;t let this app pull another creator&apos;s posts
-            automatically -- there&apos;s no API for that here. This is the practical
+            automatically, because there&apos;s no API for that here. This is the practical
             version: paste a batch of captions you&apos;ve copied from their profile, and
             every one gets reverse-engineered and saved in one go instead of one at a time.
           </p>
@@ -153,7 +153,7 @@ export default function BulkImportForm() {
             />
             <p className="mt-1 text-[11px] text-faint">
               {preview.length} post{preview.length === 1 ? "" : "s"} detected
-              {overflow > 0 ? ` -- only the first ${MAX_ITEMS} will be imported, ${overflow} will be skipped this run` : ""}
+              {overflow > 0 ? `. Only the first ${MAX_ITEMS} will be imported, and ${overflow} will be skipped this run` : ""}
             </p>
           </div>
 
@@ -183,9 +183,9 @@ export default function BulkImportForm() {
                   </span>
                   <span className="text-muted">
                     {it.preview}
-                    {it.status === "analyzing" && " -- analyzing…"}
-                    {it.status === "saving" && " -- saving…"}
-                    {it.status === "error" && ` -- ${it.error}`}
+                    {it.status === "analyzing" && " (analyzing…)"}
+                    {it.status === "saving" && " (saving…)"}
+                    {it.status === "error" && ` (${it.error})`}
                   </span>
                 </li>
               ))}

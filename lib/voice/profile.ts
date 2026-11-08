@@ -140,7 +140,7 @@ export async function getVoicePromptBlock(): Promise<string> {
   const profile = await getVoiceProfile().catch(() => null);
   if (!profile?.profile_prompt) return "";
   return `
-VOICE PROFILE -- write as this person, not as an AI assistant:
+VOICE PROFILE. Write as this person, not as an AI assistant:
 ${profile.profile_prompt}
 ${profile.never_say ? `\nNEVER write any of the following:\n${profile.never_say}` : ""}
 `.trim();

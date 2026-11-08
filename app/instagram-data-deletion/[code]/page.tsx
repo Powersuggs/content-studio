@@ -148,8 +148,8 @@ function StatusBody({
 
       {request.status === "completed" && (
         <p className="text-xs text-muted">
-          Anything you wrote yourself -- scripts, boards, your voice profile --
-          was not part of this request and is still in your account. To close
+          Anything you wrote yourself, such as scripts, boards and your voice
+          profile, was not part of this request and is still in your account. To close
           the account entirely, email{" "}
           <a
             href="mailto:contact@powersuggs.com"

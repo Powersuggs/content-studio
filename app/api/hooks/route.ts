@@ -34,14 +34,14 @@ ${SIGNAL_READING_GUIDE}
 A hook's job is to prevent the early drop-off that shows up as low average watch time.
 
 Write exactly ONE hook per archetype, in this exact order, using these definitions:
-1. identity anchor -- names who this is for ("if you're a ___...")
-2. qualifying question -- a yes/no question the right viewer answers "yes" to in their head
-3. command with urgency -- an imperative that implies a closing window ("stop doing X before...")
-4. shared memory -- invokes a common experience the audience will recognize ("remember when...")
-5. stakes claim -- states what's at risk if the viewer doesn't know this
-6. direct dare -- challenges the viewer to prove something to themselves or others
-7. contrarian take -- states a belief that contradicts common wisdom
-8. curiosity gap -- withholds a specific piece of information to create an open loop
+1. identity anchor: names who this is for ("if you're a ___...")
+2. qualifying question: a yes/no question the right viewer answers "yes" to in their head
+3. command with urgency: an imperative that implies a closing window ("stop doing X before...")
+4. shared memory: invokes a common experience the audience will recognize ("remember when...")
+5. stakes claim: states what's at risk if the viewer doesn't know this
+6. direct dare: challenges the viewer to prove something to themselves or others
+7. contrarian take: states a belief that contradicts common wisdom
+8. curiosity gap: withholds a specific piece of information to create an open loop
 
 Each hook should be a single spoken line (under ~20 words), specific to the topic, not generic. Also give a one-line rationale (under ~15 words) explaining WHY that hook works for that archetype on this specific topic.
 
