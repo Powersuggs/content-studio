@@ -1,4 +1,4 @@
-import type { WinningPost } from "@/lib/queries";
+import type { WinningPost, ReferenceMaterial } from "@/lib/queries";
 
 /**
  * Ideas proposed from his own best posts.
@@ -18,7 +18,10 @@ export interface IdeaSuggestion {
   title: string;
   /** The angle: who it is for, and what makes it land. Becomes the note. */
   note: string;
-  /** Which of his posts this was learned from, and what the lesson was. */
+  /**
+   * Where this came from and what the lesson was: one of his own posts,
+   * or a saved reference post and the mechanism taken from it.
+   */
   because: string;
 }
 
@@ -30,11 +33,35 @@ You are proposing new content ideas for a creator, by reading what has
 already worked on their own account.
 
 WHAT YOU ARE GIVEN
-A table of their best performing posts. These were chosen by send rate
-first, which is sends divided by the people reached, then by overall
+Two things.
+
+First, a table of THEIR OWN best performing posts. These were chosen by
+send rate, which is sends divided by the people reached, then by overall
 engagement rate. They are NOT the most viewed posts, on purpose: a post
 two thousand people watched and nobody passed on taught less than a
 quiet one that ten people sent to a friend.
+
+Second, posts they saved from OTHER CREATORS, sometimes with a breakdown
+of why that post worked. These are reference, not raw material.
+
+HOW TO USE SOMEONE ELSE'S POST
+Take the mechanism, never the content. The mechanism is the thing that
+would still work if every noun changed: a comparison that reframes a
+choice, a comment-to-get-it offer, a number that lands because it is
+smaller than expected, an admission that buys permission to sell.
+
+So from "middle class upgrades the lifestyle, millionaire upgrades the
+cash flow", the transferable thing is the two-way comparison that makes
+the reader place themselves, not anything about money.
+
+Hard lines on this:
+- Never reuse their words, their examples or their story.
+- Never propose something that implies he did what they did.
+- Their post being in a lane he does not post in is not a reason to skip
+  it. Several of these are lending posts and lending is closed to him.
+  Take the mechanism into one of HIS lanes instead.
+- If a reference post has no transferable mechanism, ignore it. Padding
+  the batch with weak ideas to use every source is worse than using one.
 
 WHAT TO LOOK FOR
 Find what the winners have in common, then propose ideas that have the
@@ -107,18 +134,41 @@ export function winnersTable(posts: WinningPost[]): string {
   return rows.join("\n\n");
 }
 
-export function suggestUserPrompt(posts: WinningPost[], count: number): string {
+/** The saved reference posts, as the prompt sees them. */
+export function referenceTable(refs: ReferenceMaterial[]): string {
+  if (refs.length === 0) return "";
+  return refs
+    .map((r, i) => {
+      const caption = (r.caption ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
+      const why = (r.breakdown ?? "").replace(/\s+/g, " ").trim().slice(0, 600);
+      return [
+        `${i + 1}. @${r.handle}  ${r.happened_on}`,
+        `   ${caption}`,
+        why ? `   why it worked: ${why}` : "   (not broken down yet)",
+      ].join("\n");
+    })
+    .join("\n\n");
+}
+
+export function suggestUserPrompt(
+  posts: WinningPost[],
+  count: number,
+  refs: ReferenceMaterial[] = [],
+): string {
+  const refSection = refs.length
+    ? `\n\nPosts they saved from other creators. Mechanism only, never the words or the story:\n\n${referenceTable(refs)}`
+    : "";
   return `
 Their best posts, best first:
 
-${winnersTable(posts)}
+${winnersTable(posts)}${refSection}
 
 Propose ${count} new ideas.
 `.trim();
 }
 
 export function suggestShape(count: number): string {
-  return `{"ideas":[{"title":"the idea, first person, one or two sentences","note":"who it is for and what makes it land","because":"which post above this came from and what the lesson was"}]} with exactly ${count} entries`;
+  return `{"ideas":[{"title":"the idea, first person, one or two sentences","note":"who it is for and what makes it land","because":"which post above this came from, their own or a saved one, and what the lesson was"}]} with exactly ${count} entries`;
 }
 
 /**

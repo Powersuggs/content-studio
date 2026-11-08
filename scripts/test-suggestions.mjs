@@ -34,7 +34,10 @@ try {
   process.exit(1);
 }
 
-const { normalizeSuggestions, winnersTable, suggestUserPrompt, SUGGEST_SYSTEM, LANES } =
+const {
+  normalizeSuggestions, winnersTable, referenceTable, suggestUserPrompt,
+  SUGGEST_SYSTEM, LANES,
+} =
   await import(pathToFileURL(join(out, "lib/ideas/suggest.js")).href);
 
 let f = 0;
@@ -89,6 +92,42 @@ ok("a very long caption is trimmed",
   winnersTable([{ ...posts[0], caption: "y".repeat(900) }]).includes("y".repeat(400)) &&
     !winnersTable([{ ...posts[0], caption: "y".repeat(900) }]).includes("y".repeat(401)),
   "it was not trimmed to 400");
+
+// ------------------------------------------------- the inspiration half
+const refs = [
+  { handle: "branthemortgageman", happened_on: "2026-08-17",
+    caption: "Middle class: upgrade the lifestyle. Millionaire: upgrade the cash flow. Same paycheck. Different outcome.",
+    breakdown: "Two-way comparison. The reader places themselves without being asked a question." },
+  { handle: "someoneelse", happened_on: "2026-07-02",
+    caption: "Comment SMARTBUYER for my guide", breakdown: null },
+];
+const refTable = referenceTable(refs);
+ok("a saved post shows who it came from", refTable.includes("@branthemortgageman"), refTable);
+ok("its breakdown is passed along", refTable.includes("why it worked:"), refTable);
+ok("one without a breakdown says so rather than looking analyzed",
+  refTable.includes("(not broken down yet)"), refTable);
+ok("no saved posts gives nothing rather than an empty heading",
+  referenceTable([]) === "", JSON.stringify(referenceTable([])));
+
+const both = suggestUserPrompt(posts, 8, refs);
+ok("THE ASK CARRIES BOTH SOURCES",
+  both.includes("Marine. Firefighter. Closer.") && both.includes("@branthemortgageman"), both.slice(0, 120));
+ok("and labels which half is which",
+  /saved from other creators/i.test(both), both.slice(0, 200));
+ok("with no saved posts the ask is just his own",
+  !/saved from other creators/i.test(suggestUserPrompt(posts, 8, [])),
+  "the heading showed up with nothing under it");
+
+ok("THE PROMPT SAYS TAKE THE MECHANISM NOT THE CONTENT",
+  /Take the mechanism, never the content/.test(SUGGEST_SYSTEM), "no such rule");
+ok("it forbids reusing their words or story",
+  /Never reuse their words/.test(SUGGEST_SYSTEM), "no such rule");
+ok("it forbids implying he did what they did",
+  /implies he did what they did/.test(SUGGEST_SYSTEM), "no such rule");
+ok("a lending reference is to be translated, not skipped",
+  /lending is closed to him/.test(SUGGEST_SYSTEM.replace(/\s+/g, " ")), "no such rule");
+ok("a reference with no mechanism is ignored rather than padded",
+  /Padding\s+the batch/.test(SUGGEST_SYSTEM), "no such rule");
 
 // ----------------------------------------------------------------- the prompt
 ok("THE PROMPT BANS LENDING CONTENT", /never propose lending/i.test(SUGGEST_SYSTEM), "no such line");
