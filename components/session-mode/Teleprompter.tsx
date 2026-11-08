@@ -13,6 +13,8 @@ import {
   Square,
   Maximize,
   Minimize,
+  Smartphone,
+  Download,
 } from "lucide-react";
 import { markFilmedAction } from "@/app/session-mode/actions";
 import { useRecorder } from "./useRecorder";
@@ -23,9 +25,14 @@ export interface QueuedScriptItem {
   body: string;
 }
 
+const SETTINGS_KEY = "content-studio.prompter";
+
 export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] }) {
   const [remaining, setRemaining] = useState(scripts);
   const [index, setIndex] = useState(0);
+  // Settings he dials in once and should not have to dial in again.
+  // Read after mount, never during render: the server has no
+  // localStorage, so reading it inline makes the two passes disagree.
   const [speed, setSpeed] = useState(40); // px / second
   const [textSize, setTextSize] = useState(32); // px
   const [playing, setPlaying] = useState(false);
@@ -47,6 +54,26 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
   const scrollPosRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null");
+      if (typeof saved?.speed === "number") setSpeed(saved.speed);
+      if (typeof saved?.textSize === "number") setTextSize(saved.textSize);
+      if (typeof saved?.scrim === "number") setScrim(saved.scrim);
+    } catch {
+      // Private browsing, a cleared store, or nonsense in the slot. The
+      // defaults are fine; losing a setting is not worth a broken page.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ speed, textSize, scrim }));
+    } catch {
+      /* storage full or refused; the prompter still works */
+    }
+  }, [speed, textSize, scrim]);
 
   const current = remaining[index] as QueuedScriptItem | undefined;
 
@@ -143,8 +170,17 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-2 bg-bg p-8 text-center">
         <p className="text-lg text-text">Nothing queued.</p>
-        <p className="text-sm text-faint">
-          Save a script to the queue from Script Writer to fill this up.
+        <p className="max-w-md text-sm text-faint">
+          Two ways to fill this. Write a reel or a short on the{" "}
+          <a href="/ideas" className="text-accent hover:underline">
+            Ideas
+          </a>{" "}
+          page and press Send to Session Mode on the draft, or write one
+          straight from{" "}
+          <a href="/scripts" className="text-accent hover:underline">
+            Script Writer
+          </a>{" "}
+          and save it to the queue.
         </p>
       </div>
     );
@@ -348,6 +384,38 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
               {camera.recording ? <Square size={13} /> : <Circle size={13} />}
               {camera.recording ? "Stop and save" : "Record"}
             </button>
+          )}
+
+          {camera.take && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-accent">
+                Take saved, {camera.take.mb} MB
+              </span>
+              {camera.canShareTake ? (
+                <button
+                  type="button"
+                  onClick={camera.shareTake}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-accent px-3 text-xs font-medium text-accent"
+                >
+                  <Smartphone size={13} /> Save to my photos
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={camera.downloadTake}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs text-muted hover:border-accent hover:text-accent"
+                >
+                  <Download size={13} /> Save again
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={camera.clearTake}
+                className="text-xs text-faint underline underline-offset-2 hover:text-warn"
+              >
+                Discard
+              </button>
+            </div>
           )}
 
           <button

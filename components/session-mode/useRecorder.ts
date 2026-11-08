@@ -50,6 +50,12 @@ function extensionFor(mimeType: string | undefined): string {
 
 export type CameraState = "off" | "starting" | "on" | "error";
 
+export interface Take {
+  file: File;
+  /** Megabytes, rounded, for telling him the take is really there. */
+  mb: number;
+}
+
 export interface Recorder {
   state: CameraState;
   error: string | null;
@@ -62,6 +68,32 @@ export interface Recorder {
   startRecording: () => void;
   stopRecording: () => void;
   supported: boolean;
+  /**
+   * The last take, held rather than thrown at the downloads folder.
+   *
+   * A phone has somewhere better for a video to go than Files, and the
+   * share sheet is how it gets to Photos or straight into Instagram. But
+   * iOS only opens a share sheet inside a tap, and a recording finishes
+   * on its own, so the file waits here for him to press something.
+   */
+  take: Take | null;
+  canShareTake: boolean;
+  shareTake: () => Promise<void>;
+  downloadTake: () => void;
+  clearTake: () => void;
+}
+
+/** Hands a file to the downloads folder. */
+function downloadFile(file: File) {
+  const url = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = file.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoking immediately can cancel the download on some browsers.
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 export function useRecorder(filenameHint: string): Recorder {
@@ -69,6 +101,12 @@ export function useRecorder(filenameHint: string): Recorder {
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [take, setTake] = useState<Take | null>(null);
+  const [canShareTake, setCanShareTake] = useState(false);
+  // Read inside the recorder's onstop, which closes over the moment it
+  // was created, so the current value has to come through a ref.
+  const canShareRef = useRef(false);
+  canShareRef.current = canShareTake;
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -93,6 +131,22 @@ export function useRecorder(filenameHint: string): Recorder {
         typeof navigator.mediaDevices?.getUserMedia === "function" &&
         typeof MediaRecorder !== "undefined",
     );
+    // Whether this device can hand a video to the system. Asked with a
+    // real file rather than guessed from the user agent, because a
+    // browser can have navigator.share and still refuse files.
+    try {
+      const probe = new File([new Blob([new Uint8Array([0])])], "probe.mp4", {
+        type: "video/mp4",
+      });
+      setCanShareTake(
+        typeof navigator !== "undefined" &&
+          typeof navigator.share === "function" &&
+          typeof navigator.canShare === "function" &&
+          navigator.canShare({ files: [probe] }),
+      );
+    } catch {
+      setCanShareTake(false);
+    }
   }, []);
 
   const stopCamera = useCallback(() => {
@@ -165,21 +219,27 @@ export function useRecorder(filenameHint: string): Recorder {
     };
 
     recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, {
-        type: mimeType || "video/webm",
-      });
+      const type = mimeType || "video/webm";
+      const blob = new Blob(chunksRef.current, { type });
       chunksRef.current = [];
-      if (blob.size === 0) return;
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${nameRef.current}.${extensionFor(mimeType)}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      // Revoking immediately can cancel the download on some browsers.
-      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      // An empty take used to vanish without a word, which looks exactly
+      // like a successful one until you go looking for the file.
+      if (blob.size === 0) {
+        setError(
+          "That take came back empty and was not saved. Check the camera is still on, then record again.",
+        );
+        return;
+      }
+
+      const file = new File([blob], `${nameRef.current}.${extensionFor(mimeType)}`, {
+        type,
+      });
+      setTake({ file, mb: Math.max(1, Math.round(blob.size / 1_048_576)) });
+
+      // Where there is no share sheet, the downloads folder is the only
+      // place a video can go, so it goes there straight away as before.
+      if (!canShareRef.current) downloadFile(file);
     };
 
     // A timeslice means data arrives in chunks rather than only at the end,
@@ -212,6 +272,25 @@ export function useRecorder(filenameHint: string): Recorder {
     };
   }, []);
 
+  const shareTake = useCallback(async () => {
+    if (!take) return;
+    try {
+      await navigator.share({ files: [take.file], title: "Take" });
+    } catch (err) {
+      // Closing the sheet is a thing people do on purpose.
+      if ((err as Error)?.name !== "AbortError") {
+        setError("That share was refused. Saving it to your downloads instead.");
+        downloadFile(take.file);
+      }
+    }
+  }, [take]);
+
+  const downloadTake = useCallback(() => {
+    if (take) downloadFile(take.file);
+  }, [take]);
+
+  const clearTake = useCallback(() => setTake(null), []);
+
   return {
     state,
     error,
@@ -223,5 +302,10 @@ export function useRecorder(filenameHint: string): Recorder {
     startRecording,
     stopRecording,
     supported,
+    take,
+    canShareTake,
+    shareTake,
+    downloadTake,
+    clearTake,
   };
 }
