@@ -365,3 +365,40 @@ export async function saveDraft(input: {
     ],
   );
 }
+
+/**
+ * Stores how a carousel's slides are laid out.
+ *
+ * Reads the draft, puts the plan inside it, writes it back. Deliberately
+ * not a column: the plan only means anything next to the exact text it
+ * was built for, and keeping them in one value means a rewrite replaces
+ * both at once instead of leaving a plan pointing at sentences that no
+ * longer exist.
+ */
+export async function saveSlidePlan(
+  ideaId: number,
+  format: FormatId,
+  plan: unknown,
+): Promise<void> {
+  const accountId = await currentAccountId();
+  const row = await queryOne<{ content: string | null }>(
+    `select content from idea_outputs
+      where account_id = $1 and idea_id = $2 and format = $3`,
+    [accountId, ideaId, format],
+  );
+  if (!row?.content) return;
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(row.content) as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  parsed.plan = plan;
+
+  await query(
+    `update idea_outputs set content = $4
+      where account_id = $1 and idea_id = $2 and format = $3`,
+    [accountId, ideaId, format, JSON.stringify(parsed)],
+  );
+}
