@@ -102,3 +102,80 @@ export function sizeFor(text: string, kind: "hook" | "body"): number {
 /** Instagram portrait, the largest slot in the feed. */
 export const SLIDE_W = 1080;
 export const SLIDE_H = 1350;
+
+/**
+ * How a slide is put together.
+ *
+ * Four, not fourteen. A deck reads as one thing because the same few
+ * arrangements repeat; a different composition on every slide reads as
+ * someone who could not decide.
+ */
+export type LayoutId = "plain" | "portrait" | "band" | "full";
+
+export interface Layout {
+  id: LayoutId;
+  label: string;
+  /** What it is for, shown when picking. */
+  hint: string;
+  /** Whether this layout needs a photo to make sense. */
+  needsPhoto: boolean;
+}
+
+export const LAYOUTS: Layout[] = [
+  { id: "plain", label: "Text only", hint: "No photo. Lets a strong line carry the slide", needsPhoto: false },
+  { id: "portrait", label: "Photo right", hint: "Photo down one side, text beside it. For shots of you", needsPhoto: true },
+  { id: "band", label: "Photo top", hint: "Photo across the top, text underneath. For objects and places", needsPhoto: true },
+  { id: "full", label: "Full bleed", hint: "Photo fills the slide, text over a dark wash", needsPhoto: true },
+];
+
+export function layoutById(id: string | null | undefined): LayoutId {
+  return (LAYOUTS.find((l) => l.id === id)?.id ?? "plain") as LayoutId;
+}
+
+/**
+ * Headline size for the condensed face.
+ *
+ * Separate from sizeFor() because Big Shoulders fits roughly twice the
+ * characters per line that Inter does, so the same text wants a very
+ * different size. These steps were set against real generated slide
+ * lengths and the width each layout actually leaves for text.
+ */
+export function headlineSize(text: string, narrow: boolean): number {
+  const n = text.length;
+  if (narrow) {
+    if (n <= 30) return 104;
+    if (n <= 55) return 90;
+    if (n <= 85) return 76;
+    if (n <= 120) return 64;
+    return 54;
+  }
+  if (n <= 30) return 132;
+  if (n <= 55) return 112;
+  if (n <= 85) return 94;
+  if (n <= 120) return 78;
+  if (n <= 170) return 66;
+  return 56;
+}
+
+/**
+ * Splits a headline so one phrase can be coloured.
+ *
+ * The accent is matched case-insensitively and only the first occurrence
+ * is coloured: colouring every "you" in a sentence is noise, not emphasis.
+ * An accent that is not in the text leaves the headline untouched rather
+ * than failing, because a mistyped word should cost the colour, not the
+ * slide.
+ */
+export function splitAccent(
+  text: string,
+  accent: string | null,
+): { before: string; hit: string; after: string } {
+  if (!accent?.trim()) return { before: text, hit: "", after: "" };
+  const i = text.toLowerCase().indexOf(accent.trim().toLowerCase());
+  if (i < 0) return { before: text, hit: "", after: "" };
+  return {
+    before: text.slice(0, i),
+    hit: text.slice(i, i + accent.trim().length),
+    after: text.slice(i + accent.trim().length),
+  };
+}
