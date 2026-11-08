@@ -6,6 +6,7 @@ import {
   type IdeaFilter,
 } from "@/lib/ideas/queries";
 import IdeaCapture from "@/components/ideas/IdeaCapture";
+import SuggestIdeas from "@/components/ideas/SuggestIdeas";
 import SetupNotice from "@/components/SetupNotice";
 import { safeLoad } from "@/lib/db-errors";
 import IdeaList, { type DraftView } from "@/components/ideas/IdeaList";
@@ -96,6 +97,7 @@ export default async function IdeasPage({
       )}
 
       {!setupError && <IdeaCapture />}
+      {!setupError && <SuggestIdeas />}
 
       {!setupError && counts.total > 0 && (
         <div className="flex flex-wrap items-center gap-2">

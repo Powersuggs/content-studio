@@ -204,7 +204,7 @@ function IdeaCard({
       )}
 
       <p className="mt-2 text-[10px] text-faint">
-        {idea.source === "capture" ? "Captured" : idea.source}
+        {sourceLabel(idea.source)}
         {" · "}
         {idea.createdAt.toLocaleDateString()}
       </p>
@@ -380,4 +380,18 @@ function DraftPanel({
       </button>
     </div>
   );
+}
+
+/**
+ * Where the idea came from, in words.
+ *
+ * Stored as a short code so it can be queried; shown as a sentence so the
+ * card does not read like a database row. An unknown code is printed as
+ * it is rather than swallowed, because a blank line under an idea is
+ * harder to explain than an odd word.
+ */
+function sourceLabel(source: string): string {
+  if (source === "capture") return "Captured";
+  if (source === "suggested") return "Suggested from your posts";
+  return source;
 }
