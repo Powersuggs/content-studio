@@ -68,6 +68,7 @@ export default function SlideStudio({
   const [active, setActive] = useState(0);
   const [saved, setSaved] = useState(false);
   const [downloading, setDownloading] = useState<number | null>(null);
+  const [downloadNote, setDownloadNote] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const firstRun = useRef(true);
 
@@ -114,6 +115,7 @@ export default function SlideStudio({
       sub: i === 0 ? sub : "",
       plan: plan.slides[i],
       theme: plan.theme,
+      logo: plan.logo,
       index: i + 1,
       total: lines.length,
       handle,
@@ -122,10 +124,18 @@ export default function SlideStudio({
   async function downloadAll() {
     // One at a time, named in order, so they land in the right sequence in
     // the download folder and can be selected straight into Instagram.
+    //
+    // Failures are counted rather than swallowed. A slide that does not
+    // save is a slide missing from the post, and finding that out while
+    // uploading to Instagram is finding out too late. The loop still
+    // keeps going: seven slides and a warning beats one slide and a stop.
+    setDownloadNote(null);
+    let failed = 0;
     for (let i = 0; i < lines.length; i++) {
       setDownloading(i);
       try {
         const res = await fetch(urlFor(i));
+        if (!res.ok) throw new Error(String(res.status));
         const blob = await res.blob();
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
@@ -136,10 +146,25 @@ export default function SlideStudio({
         URL.revokeObjectURL(a.href);
         await new Promise((r) => setTimeout(r, 400));
       } catch {
-        /* keep going: one failed slide should not stop the rest */
+        failed++;
       }
     }
     setDownloading(null);
+    if (failed === lines.length) {
+      setDownloadNote(
+        "None of the slides saved. If your browser asked whether this site may download several files, say yes and try again.",
+      );
+    } else if (failed > 0) {
+      setDownloadNote(
+        `${failed} of ${lines.length} slides did not save. Check your downloads folder before you post, and use "Download just this one" for the missing ones.`,
+      );
+    } else {
+      // Said plainly, because the browser gives no feedback of its own and
+      // a silent finish is indistinguishable from nothing happening.
+      setDownloadNote(
+        `All ${lines.length} slides saved to your downloads folder as slide-01 to slide-${String(lines.length).padStart(2, "0")}.`,
+      );
+    }
   }
 
   if (lines.length === 0) return null;
@@ -156,6 +181,18 @@ export default function SlideStudio({
         </p>
         <div className="flex items-center gap-2">
           {saved && <span className="text-[11px] text-accent">Saved</span>}
+          {/* The mark goes on when he says so. Colours carry the brand on
+              every slide either way, which is the quieter half of it and
+              the half that does not need asking about. */}
+          <label className="inline-flex items-center gap-1.5 text-[11px] text-muted">
+            <input
+              type="checkbox"
+              checked={plan.logo}
+              onChange={(e) => setPlan((p) => ({ ...p, logo: e.target.checked }))}
+              className="h-3 w-3 accent-current"
+            />
+            Logo on first and last
+          </label>
           <select
             value={plan.theme}
             onChange={(e) => setPlan((p) => ({ ...p, theme: e.target.value }))}
@@ -182,6 +219,16 @@ export default function SlideStudio({
           </button>
         </div>
       </div>
+
+      {downloadNote && (
+        <p
+          className={`text-[11px] ${
+            /did not save|None of the slides/.test(downloadNote) ? "text-warn" : "text-faint"
+          }`}
+        >
+          {downloadNote}
+        </p>
+      )}
 
       {/* The strip: every slide at a glance, which is how you spot that
           three in a row look the same. */}

@@ -27,6 +27,19 @@ export interface SlidePlan {
 
 export interface CarouselPlan {
   theme: string;
+  /**
+   * Whether the Rise Up mark goes on the deck at all.
+   *
+   * Off by default, and Aaron's call: the colours are the brand doing its
+   * work quietly, and a logo on every post is a thing a company does, not
+   * a person. When he wants it on a deck he turns it on, which is also
+   * the only way the mark ever lands somewhere he chose rather than
+   * somewhere the app decided.
+   *
+   * Absent on a plan saved before this existed, which reads as off, and
+   * off is what those decks should be.
+   */
+  logo: boolean;
   slides: SlidePlan[];
 }
 
@@ -102,7 +115,7 @@ export function defaultPlan(slideCount: number, photos: PhotoRef[] = []): Carous
       accent: "",
     });
   }
-  return { theme: "riseup", slides };
+  return { theme: "riseup", logo: false, slides };
 }
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
@@ -114,7 +127,17 @@ export function reconcile(
   photos: PhotoRef[] = [],
 ): CarouselPlan {
   const base = defaultPlan(slideCount, photos);
-  if (!plan?.slides?.length) return base;
+  // A plan with no slides still carries the deck's own settings, so the
+  // theme and the logo switch survive. Returning the bare default here
+  // quietly reset both, which is a thing you would only notice by
+  // choosing a theme, watching it come back, and not believing yourself.
+  if (!plan?.slides?.length) {
+    return {
+      ...base,
+      theme: typeof plan?.theme === "string" ? plan.theme : base.theme,
+      logo: plan?.logo === true,
+    };
+  }
 
   const kindOf = new Map(photos.map((p) => [p.id, p.kind]));
   const chosen = new Set<number>();
@@ -152,6 +175,7 @@ export function reconcile(
 
   return {
     theme: typeof plan.theme === "string" ? plan.theme : base.theme,
+    logo: plan.logo === true,
     slides: dedupe(slides, photos, chosen),
   };
 }
@@ -211,6 +235,7 @@ export function slideUrl(input: {
   sub?: string;
   plan: SlidePlan;
   theme: string;
+  logo?: boolean;
   index: number;
   total: number;
   handle?: string | null;
@@ -225,6 +250,7 @@ export function slideUrl(input: {
   if (input.sub) p.set("sub", input.sub);
   if (input.plan.accent) p.set("accent", input.plan.accent);
   if (input.plan.photoId) p.set("photo", String(input.plan.photoId));
+  if (input.logo) p.set("logo", "1");
   if (input.handle) p.set("handle", input.handle);
   return `/api/slide?${p.toString()}`;
 }
