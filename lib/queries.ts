@@ -488,6 +488,71 @@ export async function getPostsForAnalysis(limit = 300): Promise<PostForAnalysis[
   );
 }
 
+export interface WinningPost {
+  id: number;
+  happened_on: string;
+  caption: string | null;
+  denom: number;
+  send_rate: number | null;
+  like_rate: number | null;
+  engagement_rate: number | null;
+  watch_rate: number | null;
+}
+
+/**
+ * How few people a post must have reached before its rates are noise.
+ *
+ * A post seen by six people, one of whom sent it on, is not a 17% send
+ * rate. It is one person. Without a floor those posts take every top slot
+ * and the suggestions get built from accidents.
+ */
+export const RATE_FLOOR = 50;
+
+/**
+ * The posts worth learning from, ranked the way Aaron's own rules say to
+ * rank them.
+ *
+ * Rule 13 of his posting rules: judge by sends per reach, likes per
+ * reach, watch time and engagement rate, and explicitly NOT by raw views,
+ * total likes or comment counts. A post with 2,000 views that nobody
+ * passed on taught him less than a quiet one ten people sent to a friend,
+ * so the ordering here is send rate first.
+ *
+ * Reach is the denominator the rules name, but Instagram does not return
+ * it for everything, so views stand in where it is missing. Mixing the
+ * two is a compromise: it is the difference between ranking the whole
+ * history and ranking the part of it that happens to carry reach.
+ */
+export async function getWinningPosts(limit = 15): Promise<WinningPost[]> {
+  const handle = await requireMyHandle();
+  const timezone = DEFAULT_APP_TIMEZONE;
+  return query<WinningPost>(
+    `with base as (
+       select
+         id, caption, views, likes, comments, shares, saves,
+         duration_s, avg_watch_s,
+         ${postHappenedExpr(2)} as happened_on,
+         coalesce(nullif(reach, 0), nullif(views, 0)) as denom
+       from posts
+       where handle = $1 and account_id = $4
+     )
+     select
+       id, caption, happened_on, denom,
+       shares::float8 / nullif(denom, 0)                      as send_rate,
+       likes::float8  / nullif(denom, 0)                      as like_rate,
+       (likes + comments + shares + saves)::float8
+         / nullif(denom, 0)                                   as engagement_rate,
+       avg_watch_s / nullif(duration_s, 0)                    as watch_rate
+     from base
+     where denom >= $5
+       and caption is not null
+       and length(btrim(caption)) > 0
+     order by send_rate desc nulls last, engagement_rate desc nulls last, id desc
+     limit $3`,
+    [handle, timezone, limit, await currentAccountId(), RATE_FLOOR],
+  );
+}
+
 export interface MedianRates {
   median_like_rate: number | null;
   median_comment_rate: number | null;
