@@ -8,3 +8,8 @@ node_modules
 .vercel
 
 tsconfig.tsbuildinfo
+
+# Scratch files from local verification runs: a throwaway env
+# pointing at a test database, and a minted session cookie.
+.env.rt
+.ck

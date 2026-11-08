@@ -24,7 +24,7 @@ Return exactly this shape:
 {
   "hook": "the first 1-2 spoken lines, written to be said on camera",
   "script": "the full script body after the hook, written to be said on camera, using line breaks between beats",
-  "caption": "a caption to post alongside the video",
+  "caption": "a caption to post alongside the video, with at most 3 hashtags",
   "notes": "1-3 sentences of production notes: pacing, what to show on screen, or why this structure was chosen"
 }
 `.trim();

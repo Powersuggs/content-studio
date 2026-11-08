@@ -73,13 +73,56 @@ function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err ?? "");
 }
 
-/** The table name out of `relation "ideas" does not exist`, if that is what this is. */
+/**
+ * The column and table out of a missing-column error.
+ *
+ * Checked BEFORE missingTable, and this ordering is load-bearing. Postgres
+ * words a missing column on an insert or update as
+ *
+ *   column "content" of relation "idea_outputs" does not exist
+ *
+ * which contains the exact phrase a missing TABLE produces. A loose search
+ * for `relation "x" does not exist` therefore matched it and announced that
+ * idea_outputs did not exist, sending someone to the migration that creates
+ * a table they already had. Shapes Postgres actually emits, all verified
+ * against a real server:
+ *
+ *   42703  column "no_such_col" does not exist
+ *   42703  column "no_such_col" of relation "ideas" does not exist
+ *   42703  column i.no_such_col does not exist          (no quotes)
+ *   42P01  relation "no_such_table" does not exist
+ */
+export function missingColumn(
+  err: unknown,
+): { column: string; table: string | null } | null {
+  const message = messageOf(err);
+  if (codeOf(err) !== UNDEFINED_COLUMN && !/^column /i.test(message)) return null;
+
+  const withTable = /^column "([^"]+)" of relation "([^"]+)" does not exist/i.exec(message);
+  if (withTable) return { column: withTable[1], table: withTable[2] };
+
+  const quoted = /^column "([^"]+)" does not exist/i.exec(message);
+  if (quoted) return { column: quoted[1], table: null };
+
+  const qualified = /^column (?:([A-Za-z0-9_]+)\.)?([A-Za-z0-9_]+) does not exist/i.exec(message);
+  if (qualified) return { column: qualified[2], table: qualified[1] ?? null };
+
+  return { column: "", table: null };
+}
+
+/**
+ * The table name out of `relation "ideas" does not exist`.
+ *
+ * Anchored to the start of the message so it cannot match the tail of a
+ * missing-column error (see missingColumn above for why that mattered).
+ */
 export function missingTable(err: unknown): string | null {
+  if (missingColumn(err)) return null;
   const message = messageOf(err);
   if (codeOf(err) !== UNDEFINED_TABLE && !/does not exist/i.test(message)) {
     return null;
   }
-  const match = /relation "([^"]+)" does not exist/i.exec(message);
+  const match = /^relation "([^"]+)" does not exist/i.exec(message);
   return match ? match[1] : null;
 }
 
@@ -104,14 +147,18 @@ export function explainDbError(err: unknown): string | null {
       : `This page needs the "${table}" table, which is not in the database yet. Run the migration that creates it, then reload.`;
   }
 
-  if (codeOf(err) === UNDEFINED_COLUMN) {
+  const column = missingColumn(err);
+  if (column) {
     // Naming the newest migration rather than saying "the most recent one"
     // because the person reading this is standing in front of a broken page
     // and should not have to go and work out which file that is. A column
     // the code wants but the database lacks is almost always the newest
     // migration not having been run yet; check-migration-map.mjs keeps this
     // constant honest.
-    return `The database is missing a column this page needs, which almost always means the newest migration has not been run yet. Run migrations/${LATEST_MIGRATION} against it, then reload.`;
+    const which = column.column
+      ? `the "${column.column}" column${column.table ? ` on "${column.table}"` : ""}`
+      : "a column";
+    return `The database is missing ${which}, which this needs. That almost always means the newest migration has not been run yet. Run migrations/${LATEST_MIGRATION} against it, then reload.`;
   }
 
   return null;
