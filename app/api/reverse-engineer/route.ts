@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateJson } from "@/lib/ai/generate-json";
 import { SIGNAL_READING_GUIDE, JSON_ONLY_INSTRUCTION } from "@/lib/ai/signals";
-import { getVerifiedFactsGuardrail } from "@/lib/queries";
+import { getWritingGuardrail } from "@/lib/queries";
 import { explainDbError } from "@/lib/db-errors";
 
 interface BreakdownResponse {
@@ -73,7 +73,7 @@ Transcript:
 ${transcript || "(not provided -- infer what you reasonably can from the caption alone, and note in why_it_works that this is inferred, not transcribed)"}
 `.trim();
 
-    const guardrail = await getVerifiedFactsGuardrail();
+    const guardrail = await getWritingGuardrail();
     const result = await generateJson<BreakdownResponse>({
       system: `${BASE_SYSTEM_PROMPT}\n\n${guardrail}`,
       user: userPrompt,

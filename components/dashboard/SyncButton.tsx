@@ -81,7 +81,7 @@ export default function SyncButton({
       : phase === "syncing"
         ? "Syncing…"
         : phase === "error"
-          ? "Sync failed — retry"
+          ? "Sync failed, retry"
           : "Sync now";
 
   return (

@@ -2,6 +2,7 @@ import { query, queryOne, withTransaction } from "./db";
 import { postHappenedExpr, medianExpr, DEFAULT_APP_TIMEZONE } from "./analytics-sql";
 import { getMyHandle, requireMyHandle } from "./my-handle";
 import { currentAccountId } from "./auth/current-account";
+import { HOUSE_RULES } from "@/lib/writing/house-rules";
 
 // ---------------------------------------------------------------------
 // Profile
@@ -179,17 +180,21 @@ export async function deleteVerifiedFact(id: number): Promise<void> {
 }
 
 /**
- * Shared instruction block for any AI route that might state a specific
- * number, split, cap, cost, or rule. Appended to those system prompts so
- * the model treats verified, sourced facts as ground truth and writes
- * around anything else instead of inventing a specific.
+ * The block every writing route appends to its system prompt.
+ *
+ * Two things that must hold whatever is being written: the house rules
+ * (punctuation and the names of things) and the verified facts, which the
+ * model treats as ground truth and writes around rather than inventing a
+ * specific. They travel together because they are appended at the same five
+ * call sites, and splitting them into two functions only creates a second
+ * thing to forget.
  *
  * Topic-general on purpose. This started as a lending guardrail, but the
  * numbers that need protecting move with the content: a commission split
  * or a licensing cost quoted at someone being recruited to spend money is
  * every bit as consequential as an FHA rule quoted at a buyer.
  */
-export async function getVerifiedFactsGuardrail(): Promise<string> {
+export async function getWritingGuardrail(): Promise<string> {
   const facts = await getVerifiedFacts();
 
   // Group by topic so the model can tell at a glance what each fact
@@ -217,6 +222,8 @@ export async function getVerifiedFactsGuardrail(): Promise<string> {
     .join("\n\n");
 
   return `
+${HOUSE_RULES}
+
 VERIFIED FACTS GUARDRAIL:
 ${
   facts.length > 0
