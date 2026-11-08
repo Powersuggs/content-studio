@@ -70,16 +70,20 @@ export function reconcile(
     slides: base.slides.map((d, i) => {
       const kept = plan.slides[i];
       if (!kept) return d;
+      const layout = (kept.layout ?? d.layout) as LayoutId;
+      // The layout says whether this slide has a picture on it; the
+      // picker only says which one. Trying to tell "none chosen yet"
+      // apart from "none wanted" by a stored null was guesswork, and it
+      // left carousels planned before photos existed full of empty
+      // frames. Wanting no photo is now expressed by choosing Text only.
+      const wantsPhoto = layout !== "plain";
       return {
-        layout: (kept.layout ?? d.layout) as LayoutId,
-        // A stored null is a deliberate "no photo"; an absent field is a
-        // slide the plan predates, which should get the default.
-        photoId:
-          typeof kept.photoId === "number"
+        layout,
+        photoId: wantsPhoto
+          ? typeof kept.photoId === "number"
             ? kept.photoId
-            : "photoId" in kept
-              ? null
-              : d.photoId,
+            : d.photoId
+          : null,
         accent: typeof kept.accent === "string" ? kept.accent : "",
       };
     }),

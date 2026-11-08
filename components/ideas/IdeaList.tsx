@@ -340,7 +340,7 @@ function DraftPanel({
               format={format}
               title={c.title}
               parts={c.parts}
-              sub={c.notes}
+              sub=""
               photos={photos}
               handle={handle}
               initialPlan={c.plan ?? null}

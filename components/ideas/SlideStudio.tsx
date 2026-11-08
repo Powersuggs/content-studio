@@ -99,6 +99,9 @@ export default function SlideStudio({
   const urlFor = (i: number) =>
     slideUrl({
       text: lines[i] ?? "",
+      // Only ever text meant for the reader. The draft's notes field is
+      // direction for whoever makes the slide ("big numbers, one per
+      // slide") and printing it was putting stage directions on the post.
       sub: i === 0 ? sub : "",
       plan: plan.slides[i],
       theme: plan.theme,
@@ -132,8 +135,6 @@ export default function SlideStudio({
 
   if (lines.length === 0) return null;
   const cur = plan.slides[active];
-  const layout = LAYOUTS.find((l) => l.id === cur.layout);
-  const needsPhoto = !!layout?.needsPhoto && !cur.photoId;
 
   return (
     <div className="space-y-4 rounded-lg border border-border bg-panel-2 p-3">
@@ -213,7 +214,15 @@ export default function SlideStudio({
                   key={l.id}
                   type="button"
                   title={l.hint}
-                  onClick={() => set(active, { layout: l.id as LayoutId })}
+                  onClick={() =>
+                    set(active, {
+                      layout: l.id as LayoutId,
+                      photoId:
+                        l.id === "plain"
+                          ? null
+                          : (cur.photoId ?? photoIds[active % Math.max(photoIds.length, 1)] ?? null),
+                    })
+                  }
                   className={`rounded-lg border px-2 py-1 text-[11px] ${
                     cur.layout === l.id
                       ? "border-accent bg-accent/10 text-accent"
@@ -229,9 +238,9 @@ export default function SlideStudio({
           <div>
             <p className="mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-faint">
               Photo
-              {needsPhoto && (
-                <span className="inline-flex items-center gap-1 text-warn">
-                  <ImageOff size={10} /> this layout needs one
+              {cur.layout === "plain" && (
+                <span className="inline-flex items-center gap-1 text-faint">
+                  <ImageOff size={10} /> not used on a text-only slide
                 </span>
               )}
             </p>
@@ -242,12 +251,12 @@ export default function SlideStudio({
             ) : (
               <select
                 value={cur.photoId ?? ""}
+                disabled={cur.layout === "plain"}
                 onChange={(e) =>
                   set(active, { photoId: e.target.value ? Number(e.target.value) : null })
                 }
                 className="w-full rounded-lg border border-border bg-panel px-2 py-1.5 text-[11px] text-text outline-none focus:border-accent"
               >
-                <option value="">No photo</option>
                 {photos.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label || `Photo ${p.id}`}
