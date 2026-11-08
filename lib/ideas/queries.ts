@@ -24,7 +24,7 @@ export interface Idea {
   remaining: FormatId[];
 }
 
-export type IdeaFilter = "all" | "in-progress" | "untouched";
+export type IdeaFilter = "all" | "in-progress" | "untouched" | "parked";
 
 interface IdeaRow {
   id: string;
@@ -52,11 +52,16 @@ export async function listIdeas(filter: IdeaFilter = "all"): Promise<Idea[]> {
        left join idea_outputs o
          on o.idea_id = i.id and o.account_id = i.account_id
       where i.account_id = $1
-        and i.archived_at is null
-      group by i.id
-      order by i.created_at desc
+        -- Parked ideas are the ones with a date on them, everything else
+        -- is the ones without. Passed as a parameter rather than spliced
+        -- into the string: the value comes from a union type today, and
+        -- a query that cannot be built wrong does not depend on that
+        -- staying true.
+        and (i.archived_at is not null) = $2
+      group by i.id, i.archived_at
+      order by case when $2 then i.archived_at else i.created_at end desc
       limit 200`,
-    [accountId],
+    [accountId, filter === "parked"],
   );
 
   const ideas = rows.map((row) => {
@@ -147,6 +152,23 @@ export async function archiveIdea(ideaId: number): Promise<void> {
   const accountId = await currentAccountId();
   await query(
     `update ideas set archived_at = now(), updated_at = now()
+      where id = $1 and account_id = $2`,
+    [ideaId, accountId],
+  );
+}
+
+/**
+ * Takes an idea back off the shelf.
+ *
+ * Parking was a one-way door: archived_at was only ever set, every list
+ * filtered those rows out, and nothing anywhere cleared it. The button
+ * said "Park this idea", which sounds like somewhere you can go and
+ * fetch it from, and there was no such place. Now there is.
+ */
+export async function unarchiveIdea(ideaId: number): Promise<void> {
+  const accountId = await currentAccountId();
+  await query(
+    `update ideas set archived_at = null, updated_at = now()
       where id = $1 and account_id = $2`,
     [ideaId, accountId],
   );
