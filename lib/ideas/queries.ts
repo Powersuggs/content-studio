@@ -402,3 +402,34 @@ export async function saveSlidePlan(
     [accountId, ideaId, format, JSON.stringify(parsed)],
   );
 }
+
+/**
+ * How many times each photo has been used on a slide.
+ *
+ * Counted from the stored plans rather than kept in a column, so it can
+ * never disagree with reality: deleting a carousel or swapping a photo
+ * out changes the count the moment it happens, with nothing to keep in
+ * step. The table is small and this runs once per page.
+ */
+export async function photoUsage(): Promise<Map<number, number>> {
+  const accountId = await currentAccountId();
+  const rows = await query<{ content: string | null }>(
+    `select content from idea_outputs
+      where account_id = $1 and content is not null`,
+    [accountId],
+  );
+  const counts = new Map<number, number>();
+  for (const r of rows) {
+    if (!r.content) continue;
+    try {
+      const parsed = JSON.parse(r.content) as { plan?: { slides?: { photoId?: unknown }[] } };
+      for (const s of parsed.plan?.slides ?? []) {
+        const id = typeof s?.photoId === "number" ? s.photoId : null;
+        if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+    } catch {
+      // A draft whose JSON will not parse simply contributes nothing.
+    }
+  }
+  return counts;
+}
