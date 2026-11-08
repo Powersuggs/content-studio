@@ -7,6 +7,7 @@ import { toggleOutputAction, archiveIdeaAction } from "@/app/ideas/actions";
 import { formatLabel } from "@/lib/ideas/formats";
 import type { Idea, IdeaFilter } from "@/lib/ideas/queries";
 import type { GeneratedOutput } from "@/lib/ideas/generate";
+import SlideStudio, { type PhotoChoice } from "./SlideStudio";
 
 export interface DraftView {
   format: string;
@@ -20,11 +21,15 @@ export default function IdeaList({
   drafts,
   emptyFilter,
   hasAny,
+  photos = [],
+  handle = null,
 }: {
   ideas: Idea[];
   drafts: Record<number, DraftView[]>;
   emptyFilter: IdeaFilter;
   hasAny: boolean;
+  photos?: PhotoChoice[];
+  handle?: string | null;
 }) {
   if (ideas.length === 0) {
     return (
@@ -41,13 +46,29 @@ export default function IdeaList({
   return (
     <ul className="space-y-3">
       {ideas.map((idea) => (
-        <IdeaCard key={idea.id} idea={idea} drafts={drafts[idea.id] ?? []} />
+        <IdeaCard
+          key={idea.id}
+          idea={idea}
+          drafts={drafts[idea.id] ?? []}
+          photos={photos}
+          handle={handle}
+        />
       ))}
     </ul>
   );
 }
 
-function IdeaCard({ idea, drafts }: { idea: Idea; drafts: DraftView[] }) {
+function IdeaCard({
+  idea,
+  drafts,
+  photos,
+  handle,
+}: {
+  idea: Idea;
+  drafts: DraftView[];
+  photos: PhotoChoice[];
+  handle: string | null;
+}) {
   const [isPending, startTransition] = useTransition();
   const [expanded, setExpanded] = useState(idea.made.length > 0);
   const [working, setWorking] = useState<string | null>(null);
@@ -176,6 +197,9 @@ function IdeaCard({ idea, drafts }: { idea: Idea; drafts: DraftView[] }) {
           onRewrite={() => write(open)}
           onRemove={() => untick(open)}
           onClose={() => setOpen(null)}
+          ideaId={idea.id}
+          photos={photos}
+          handle={handle}
         />
       )}
 
@@ -195,6 +219,9 @@ function DraftPanel({
   onRewrite,
   onRemove,
   onClose,
+  ideaId,
+  photos,
+  handle,
 }: {
   format: string;
   draft: DraftView | null;
@@ -202,6 +229,9 @@ function DraftPanel({
   onRewrite: () => void;
   onRemove: () => void;
   onClose: () => void;
+  ideaId: number;
+  photos: PhotoChoice[];
+  handle: string | null;
 }) {
   const [copied, setCopied] = useState(false);
   const c = draft?.content ?? null;
@@ -302,6 +332,19 @@ function DraftPanel({
             <p className="rounded-md border border-border bg-panel px-2 py-1.5 text-[11px] text-muted">
               {c.notes}
             </p>
+          )}
+
+          {format === "carousel" && c && (
+            <SlideStudio
+              ideaId={ideaId}
+              format={format}
+              title={c.title}
+              parts={c.parts}
+              sub={c.notes}
+              photos={photos}
+              handle={handle}
+              initialPlan={c.plan ?? null}
+            />
           )}
 
           {(draft?.newsletterId || draft?.scriptId) && (

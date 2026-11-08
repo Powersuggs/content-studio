@@ -8,6 +8,8 @@ import IdeaCapture from "@/components/ideas/IdeaCapture";
 import SetupNotice from "@/components/SetupNotice";
 import { safeLoad } from "@/lib/db-errors";
 import IdeaList, { type DraftView } from "@/components/ideas/IdeaList";
+import { listPhotos } from "@/lib/photos/queries";
+import { getMyHandle } from "@/lib/my-handle";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +51,17 @@ export default async function IdeasPage({
       newsletterId: d.newsletterId,
     }));
   }
+
+  // The studio needs the photo bank to choose from and the handle for the
+  // slide footer. Both are guarded: a missing photos table should cost the
+  // picker, not the page.
+  const [photoRows] = await safeLoad(
+    () => listPhotos(300),
+    [] as Awaited<ReturnType<typeof listPhotos>>,
+    "ideas",
+  );
+  const photos = photoRows.map((p) => ({ id: p.id, label: p.label }));
+  const [handle] = await safeLoad(() => getMyHandle(), null as string | null, "ideas");
 
   const setupError = ideasError;
 
@@ -97,6 +110,8 @@ export default async function IdeasPage({
           drafts={drafts}
           emptyFilter={filter}
           hasAny={counts.total > 0}
+          photos={photos}
+          handle={handle}
         />
       )}
     </div>

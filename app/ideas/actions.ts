@@ -1,7 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createIdea, toggleOutput, archiveIdea } from "@/lib/ideas/queries";
+import {
+  createIdea,
+  toggleOutput,
+  archiveIdea,
+  saveSlidePlan,
+} from "@/lib/ideas/queries";
+import { isFormatId } from "@/lib/ideas/formats";
 
 export async function createIdeaAction(input: {
   title: string;
@@ -21,5 +27,15 @@ export async function toggleOutputAction(
 
 export async function archiveIdeaAction(ideaId: number): Promise<void> {
   await archiveIdea(ideaId);
+  revalidatePath("/ideas");
+}
+
+export async function saveSlidePlanAction(
+  ideaId: number,
+  format: string,
+  plan: unknown,
+): Promise<void> {
+  if (!isFormatId(format)) throw new Error(`Unknown format: ${format}`);
+  await saveSlidePlan(ideaId, format, plan);
   revalidatePath("/ideas");
 }

@@ -1,4 +1,5 @@
 import type { FormatId } from "./formats";
+import type { CarouselPlan } from "@/lib/slides/plan";
 
 /**
  * What each format actually is, told to the model.
@@ -26,6 +27,15 @@ export interface GeneratedOutput {
   caption: string;
   /** One line on what to do with it, or what was deliberately left out. */
   notes: string;
+  /**
+   * How this carousel's slides are laid out, once somebody has chosen.
+   *
+   * Kept inside the draft rather than in a column of its own, so a plan
+   * cannot drift away from the text it was made for: rewriting the
+   * carousel replaces both together, which is the correct behaviour.
+   * Absent on every other format, and on a carousel nobody has styled.
+   */
+  plan?: CarouselPlan;
 }
 
 interface FormatSpec {
@@ -169,11 +179,16 @@ export function normalize(raw: unknown): GeneratedOutput | null {
     : [];
   // A result with no title AND nothing in it is a failure, not a draft.
   if (!title && !body && parts.length === 0) return null;
-  return {
+  const out: GeneratedOutput = {
     title,
     parts,
     body,
     caption: capHashtags(str(r.caption)),
     notes: str(r.notes),
   };
+  // Carried through rather than validated field by field: reconcile() in
+  // plan.ts is where a malformed or stale plan is made safe, and it has to
+  // run anyway whenever the slide count changes.
+  if (r.plan && typeof r.plan === "object") out.plan = r.plan as CarouselPlan;
+  return out;
 }
