@@ -255,6 +255,7 @@ function DraftPanel({
   handle: string | null;
 }) {
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const c = draft?.content ?? null;
 
   // Everything in one block, in the order it would be used, so one press
@@ -294,7 +295,11 @@ function DraftPanel({
                   setCopied(true);
                   setTimeout(() => setCopied(false), 1500);
                 } catch {
-                  setCopied(false);
+                  // A refused clipboard looked exactly like a working one
+                  // that copied nothing: the button simply did not change
+                  // and the paste came out empty somewhere else.
+                  setCopyFailed(true);
+                  setTimeout(() => setCopyFailed(false), 4000);
                 }
               }}
               className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] text-muted hover:border-accent hover:text-accent"
@@ -302,6 +307,11 @@ function DraftPanel({
               {copied ? <Check size={11} /> : <Copy size={11} />}
               {copied ? "Copied" : "Copy"}
             </button>
+          )}
+          {copyFailed && (
+            <span className="text-[11px] text-warn">
+              Your browser blocked the copy. Select the text and copy it by hand.
+            </span>
           )}
           <button
             type="button"

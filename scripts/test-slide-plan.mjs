@@ -55,6 +55,19 @@ const bank = [
 ];
 const kindOf = (id) => bank.find((p) => p.id === id)?.kind;
 
+// The logo is off until he turns it on.
+ok("A NEW DECK CARRIES NO LOGO", defaultPlan(8, bank).logo === false,
+  String(defaultPlan(8, bank).logo));
+ok("a deck he turned it on for keeps it on",
+  reconcile({ theme: "riseup", logo: true, slides: [] }, 6, bank).logo === true,
+  "it was turned back off");
+ok("a plan saved before the switch existed reads as off",
+  reconcile({ theme: "riseup", slides: [] }, 6, bank).logo === false,
+  "an old deck came back with a logo on it");
+ok("anything other than true is off",
+  reconcile({ theme: "riseup", logo: "yes", slides: [] }, 6, bank).logo === false,
+  "a junk value turned it on");
+
 const p8 = defaultPlan(8, bank);
 ok("every slide gets a photo", p8.slides.every((s) => s.photoId !== null),
   JSON.stringify(p8.slides.map((s) => s.photoId)));

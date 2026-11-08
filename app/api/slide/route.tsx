@@ -110,6 +110,8 @@ export async function GET(request: Request) {
   const handle = (searchParams.get("handle") ?? "").slice(0, 40);
   const photoId = Number(searchParams.get("photo") ?? "") || null;
   const t = themeById(searchParams.get("theme"));
+  // Off unless asked for. The mark is his to place, not the app's.
+  const wantsLogo = searchParams.get("logo") === "1";
   const layout = layoutById(searchParams.get("layout"));
 
   const [f, logoSrc, photo] = await Promise.all([
@@ -138,7 +140,7 @@ export async function GET(request: Request) {
       }}
     >
       <div style={{ display: "flex", alignItems: "center" }}>
-        {(isHook || isLast) && t.logo && logoSrc ? (
+        {wantsLogo && (isHook || isLast) && t.logo && logoSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={logoSrc} width={300} alt="" />
         ) : (
