@@ -105,10 +105,17 @@ export default function AppShell({
   return (
     <div className="min-h-screen md:flex">
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex md:w-60 md:shrink-0 md:flex-col md:gap-6 md:border-r md:border-border md:bg-panel md:p-4">
-        <Brand />
-        <NavLinks />
-        {accountFooter}
+      <aside className="hidden md:sticky md:top-0 md:flex md:h-app md:w-60 md:shrink-0 md:flex-col md:gap-4 md:border-r md:border-border md:bg-panel md:p-4">
+        <div className="shrink-0">
+          <Brand />
+        </div>
+        {/* The list scrolls, not the sidebar. Nineteen items is taller
+            than a short laptop window, and the ones that fall off the
+            bottom are the ones added most recently. */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <NavLinks />
+        </div>
+        <div className="shrink-0">{accountFooter}</div>
       </aside>
 
       {/* Mobile top bar */}
@@ -135,12 +142,27 @@ export default function AppShell({
             drawerOpen ? "opacity-100" : "opacity-0"
           }`}
         />
+        {/*
+         * Aaron, on his phone: "i cannot see the whole menu or scroll down
+         * to ose eit i can only see barly some of the words of history".
+         *
+         * History is the sixteenth of nineteen items. The drawer was as
+         * tall as the screen with no way to scroll, so everything past it,
+         * including the database check, the sources page and signing out,
+         * simply could not be reached on a phone.
+         *
+         * Now the menu itself scrolls between a fixed title and a fixed
+         * footer, so signing out never moves and nothing is unreachable.
+         * h-app rather than inset-y-0 because on iOS Safari a full-height
+         * fixed box runs under the address bar, which is the same fault
+         * that hid the filming buttons.
+         */}
         <div
-          className={`absolute inset-y-0 left-0 flex w-72 max-w-[80vw] flex-col gap-6 border-r border-border bg-panel p-4 shadow-xl transition-transform duration-200 ${
+          className={`absolute left-0 top-0 flex h-app w-72 max-w-[80vw] flex-col gap-3 border-r border-border bg-panel p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl transition-transform duration-200 ${
             drawerOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <div className="flex items-center justify-between">
+          <div className="flex shrink-0 items-center justify-between">
             <Brand />
             <button
               type="button"
@@ -151,8 +173,10 @@ export default function AppShell({
               <X size={20} strokeWidth={1.75} />
             </button>
           </div>
-          <NavLinks onNavigate={() => setDrawerOpen(false)} />
-          {accountFooter}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <NavLinks onNavigate={() => setDrawerOpen(false)} />
+          </div>
+          <div className="shrink-0 border-t border-border pt-3">{accountFooter}</div>
         </div>
       </div>
 

@@ -230,8 +230,30 @@ export default function Teleprompter({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, speed]);
 
-  // Filming wants the whole screen: the app's sidebar is both a distraction
-  // and about a fifth of the width that the words could be using.
+  /*
+   * Whether this browser will go full screen at all.
+   *
+   * Aaron: "the box next to the camera on and off button does nothing".
+   * It did nothing on his phone and the code already knew why, with a
+   * comment saying iPhone Safari refuses it, and showed the button
+   * anyway. A control that is documented not to work is worse than no
+   * control: he pressed it, nothing happened, and the only thing he
+   * learned was not to trust the buttons.
+   *
+   * It also matters much less than it did. The reason for it was to
+   * escape the app's sidebar while filming, and filming has no sidebar
+   * any more.
+   */
+  const [canFullscreen, setCanFullscreen] = useState(false);
+  useEffect(() => {
+    setCanFullscreen(
+      typeof document !== "undefined" &&
+        document.fullscreenEnabled === true &&
+        typeof document.documentElement.requestFullscreen === "function",
+    );
+  }, []);
+
+  // Filming wants the whole screen, where a browser allows it.
   async function toggleFullscreen() {
     try {
       if (document.fullscreenElement) {
@@ -342,7 +364,15 @@ export default function Teleprompter({
             himself against a picture 22% narrower than the one being
             recorded. Whatever is left over goes black, and the words sit
             over that quite happily. */}
-        <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+        {/* Top, not middle.
+            Aaron: "the camera is mid phone screen i need everything up at
+            the top so it doesnt look like im lookding down when i am
+            reading". The lens is at the top of the phone, so anything he
+            looks at belongs as near to it as it can get. Reading from the
+            middle of the screen puts his eyes below the lens in every
+            take, and on the finished video that reads as not quite looking
+            at you. */}
+        <div className="absolute inset-0 flex items-start justify-center overflow-hidden">
           <div
             className="relative"
             style={{ width: frame.width, height: frame.height }}
@@ -441,7 +471,7 @@ export default function Teleprompter({
           <button
             type="button"
             onClick={() => setChunk((c) => Math.min(c + 1, chunks.length - 1))}
-            className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center sm:px-16"
+            className="absolute inset-0 flex flex-col items-center justify-start px-6 pt-14 text-center sm:px-16"
           >
             <p
               className={`font-semibold ${cameraOn ? "text-white" : "text-text"}`}
@@ -465,7 +495,7 @@ export default function Teleprompter({
         ) : (
           <div
             ref={containerRef}
-            className="absolute inset-0 overflow-y-auto px-6 py-16 sm:px-16"
+            className="absolute inset-0 overflow-y-auto px-6 pb-16 pt-14 sm:px-16"
           >
             <div className="mx-auto max-w-3xl">
               <p
@@ -656,14 +686,16 @@ export default function Teleprompter({
                 {camera.state === "starting" ? "Starting" : cameraOn ? "Off" : "Camera"}
               </button>
             )}
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              className="flex h-11 w-11 items-center justify-center rounded-lg border border-border text-muted"
-              aria-label={isFullscreen ? "Exit full screen" : "Full screen"}
-            >
-              {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
-            </button>
+            {canFullscreen && (
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="flex h-11 w-11 items-center justify-center rounded-lg border border-border text-muted"
+                aria-label={isFullscreen ? "Exit full screen" : "Full screen"}
+              >
+                {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowSettings((v) => !v)}

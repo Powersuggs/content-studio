@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Scissors, X, Play, Pause, Undo2, Loader2 } from "lucide-react";
+import { Scissors, X, Play, Pause, Undo2, Loader2, Trash2 } from "lucide-react";
 import { keepRanges, keptSeconds, type Span } from "@/lib/session/recut";
 import { canExport, exportCut } from "@/lib/session/export-video";
 import { useTakeAudio, SLICES_PER_SECOND } from "./useTakeAudio";
@@ -44,6 +44,20 @@ export default function EditRoom({
   /** Gaps he has chosen to keep, by their start time. */
   const [kept, setKept] = useState<Set<number>>(new Set());
 
+  /**
+   * Cuts he marked himself, which is the other half of editing.
+   *
+   * Aaron: "I should be able to touch it and scroll where i want he cut
+   * to happen then hit cut then i can scroll to the next section cut then
+   * remove it". Finding the silences automatically only removes dead air.
+   * Taking out a sentence he fluffed, or a whole run that went nowhere,
+   * is his judgement and nothing can guess it.
+   *
+   * Two taps: mark where it starts, scrub, mark where it ends.
+   */
+  const [mine, setMine] = useState<Span[]>([]);
+  const [markFrom, setMarkFrom] = useState<number | null>(null);
+
   const [working, setWorking] = useState(false);
   const [progress, setProgress] = useState(0);
   const [problem, setProblem] = useState<string | null>(null);
@@ -65,8 +79,8 @@ export default function EditRoom({
   }, []);
 
   const cuts = useMemo(
-    () => audio.quiet.filter((s) => !kept.has(s.start)),
-    [audio.quiet, kept],
+    () => [...audio.quiet.filter((s) => !kept.has(s.start)), ...mine],
+    [audio.quiet, kept, mine],
   );
   const ranges = useMemo(
     () => keepRanges(duration, cuts, trimStart, trimEnd),
@@ -138,6 +152,18 @@ export default function EditRoom({
   };
 
   const untouched = cuts.length === 0 && trimStart === 0 && trimEnd === 0;
+
+  /** Finish the cut he is marking, whichever way round he marked it. */
+  const closeMark = () => {
+    if (markFrom === null) return;
+    const start = Math.min(markFrom, playhead);
+    const end = Math.max(markFrom, playhead);
+    setMarkFrom(null);
+    // Below about a frame there is nothing to remove, and a zero-length
+    // cut would sit in the list looking like it had done something.
+    if (end - start < 0.05) return;
+    setMine((prev) => [...prev, { start, end }].sort((a, b) => a.start - b.start));
+  };
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col bg-bg">
@@ -216,6 +242,7 @@ export default function EditRoom({
           trimStart={trimStart}
           trimEnd={trimEnd}
           playhead={playhead}
+          markFrom={markFrom}
           onSeek={seek}
         />
 
@@ -249,6 +276,70 @@ export default function EditRoom({
             </button>
           )}
         </div>
+
+        {/* Marking a cut by hand. Sits right under the waveform because
+            that is where the scrubbing happens. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {markFrom === null ? (
+            <button
+              type="button"
+              onClick={() => setMarkFrom(playhead)}
+              className="flex h-11 items-center gap-1.5 rounded-lg border border-accent px-3 text-sm font-medium text-accent"
+            >
+              <Scissors size={15} /> Cut from here
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={closeMark}
+                className="flex h-11 items-center gap-1.5 rounded-lg bg-accent px-3 text-sm font-medium text-bg"
+              >
+                <Scissors size={15} /> Cut to here
+              </button>
+              <span className="font-mono text-xs text-accent">
+                from {markFrom.toFixed(1)}s
+              </span>
+              <button
+                type="button"
+                onClick={() => setMarkFrom(null)}
+                className="h-11 rounded-lg border border-border px-3 text-xs text-muted"
+              >
+                Never mind
+              </button>
+            </>
+          )}
+        </div>
+        {markFrom !== null && (
+          <p className="text-xs text-faint">
+            Now drag along the sound waves to where the cut should end, then
+            press Cut to here.
+          </p>
+        )}
+
+        {mine.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-xs text-faint">Cuts you marked</p>
+            {mine.map((cut) => (
+              <div
+                key={`${cut.start}-${cut.end}`}
+                className="flex items-center gap-2 rounded-lg border border-accent/40 bg-accent/5 p-2.5 text-xs text-accent"
+              >
+                <span className="font-mono tabular-nums">
+                  {cut.start.toFixed(1)}s to {cut.end.toFixed(1)}s
+                </span>
+                <span className="text-faint">{(cut.end - cut.start).toFixed(1)}s</span>
+                <button
+                  type="button"
+                  onClick={() => setMine((p) => p.filter((c) => c !== cut))}
+                  className="ml-auto flex h-8 items-center gap-1 rounded-lg border border-border px-2 text-muted"
+                >
+                  <Trash2 size={13} /> Put back
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* The gaps. Cut by default, because that is what he is here for,
             and one tap puts any of them back. */}

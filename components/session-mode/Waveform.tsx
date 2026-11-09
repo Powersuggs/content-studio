@@ -23,6 +23,7 @@ export default function Waveform({
   trimStart,
   trimEnd,
   playhead,
+  markFrom,
   onSeek,
 }: {
   loudness: number[];
@@ -34,6 +35,8 @@ export default function Waveform({
   trimEnd: number;
   /** Where playback is, in seconds. */
   playhead: number;
+  /** Where a cut he is marking by hand begins, if he is marking one. */
+  markFrom?: number | null;
   onSeek: (seconds: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -89,21 +92,60 @@ export default function Waveform({
       paint.fillRect(x, middle - bar, 1, bar * 2);
     }
 
-    // The playhead last, so it is never buried under a bar.
+    // The start of a cut being marked, and the stretch it covers so far,
+    // so he can see what he is about to remove before he commits to it.
+    if (markFrom !== null && markFrom !== undefined) {
+      const from = Math.min(markFrom, playhead);
+      const to = Math.max(markFrom, playhead);
+      paint.fillStyle = "rgba(62, 207, 142, 0.22)";
+      paint.fillRect(xOf(from), 0, Math.max(1, xOf(to) - xOf(from)), height);
+      paint.fillStyle = "#3ecf8e";
+      paint.fillRect(Math.min(width - 2, xOf(markFrom)), 0, 2, height);
+    }
+
+    // The playhead last, so it is never buried under anything.
     if (playhead > 0) {
       paint.fillStyle = "#e8eaed";
       paint.fillRect(Math.min(width - 2, xOf(playhead)), 0, 2, height);
     }
-  }, [loudness, duration, cuts, trimStart, trimEnd, playhead, slicesPerSecond]);
+  }, [loudness, duration, cuts, trimStart, trimEnd, playhead, markFrom, slicesPerSecond]);
+
+  /**
+   * Scrubbing, by dragging.
+   *
+   * Aaron: "I should be able to touch it and scroll where i want he cut
+   * to happen". A tap alone makes you guess and tap again; dragging lets
+   * you hunt for the exact spot while watching the picture move.
+   *
+   * Pointer events rather than touch events so one path covers a thumb
+   * and a mouse, with the pointer captured so a finger that slides off
+   * the strip keeps scrubbing instead of stopping dead. touch-none stops
+   * the page from scrolling underneath while he drags.
+   */
+  const scrub = (clientX: number, target: HTMLCanvasElement) => {
+    const box = target.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - box.left) / box.width));
+    onSeek(ratio * duration);
+  };
 
   return (
     <canvas
       ref={canvasRef}
       // Tall enough to hit with a thumb, which is how he will use it.
-      className="h-20 w-full cursor-pointer rounded-lg bg-panel-2"
-      onClick={(e) => {
-        const box = e.currentTarget.getBoundingClientRect();
-        onSeek(((e.clientX - box.left) / box.width) * duration);
+      className="h-20 w-full touch-none cursor-pointer rounded-lg bg-panel-2"
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        scrub(e.clientX, e.currentTarget);
+      }}
+      onPointerMove={(e) => {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+          scrub(e.clientX, e.currentTarget);
+        }
+      }}
+      onPointerUp={(e) => {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }
       }}
     />
   );
