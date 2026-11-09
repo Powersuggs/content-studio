@@ -328,6 +328,7 @@ export default function Teleprompter({
           onSaveUncut={camera.saveUncut}
           onRemove={camera.removeTake}
           onMove={camera.moveTake}
+          onEdited={camera.addTake}
           onClose={() => setReviewing(false)}
         />
       )}

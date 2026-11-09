@@ -148,6 +148,8 @@ export interface Recorder {
    * one can be saved on its own the moment it exists.
    */
   takes: Take[];
+  /** Keep a file made elsewhere, such as an edited copy, as a piece. */
+  addTake: (file: File, seconds: number) => void;
   canShareTake: boolean;
   /**
    * What the last save actually did, in words.
@@ -183,6 +185,13 @@ export function useRecorder(filenameHint: string): Recorder {
   const takeIdRef = useRef(1);
   // Read inside onstop, which closes over the moment the recorder was
   // made, so the running duration has to come through a ref.
+  //
+  // Kept in step with the counter below by an effect. It used to be set
+  // to zero when recording started and then never touched again, so every
+  // take was stored as nought seconds long: the timer on screen ran, the
+  // review list said 0:00 for everything, and the total for a whole
+  // session was 0:00 too. Found by filming a ten second take in a browser
+  // and reading the list back.
   const elapsedRef = useRef(0);
   // The uncut copy of the piece currently recording, handed to the cut
   // one when both have finished.
@@ -352,6 +361,12 @@ export function useRecorder(filenameHint: string): Recorder {
     setCutting(false);
     setState("off");
   }, [stopMeter]);
+
+  // Keep the ref in step with the counter, so a finished take knows how
+  // long it ran. See the note on elapsedRef above for what this fixes.
+  useEffect(() => {
+    elapsedRef.current = elapsed;
+  }, [elapsed]);
 
   const startCamera = useCallback(async () => {
     if (!supported) {
@@ -657,6 +672,29 @@ export function useRecorder(filenameHint: string): Recorder {
     }
   }, []);
 
+  /**
+   * Keep a file made somewhere else as a piece of this session.
+   *
+   * Used by the editing room for the cut version. Added alongside the
+   * original rather than replacing it, deliberately: re-encoding is a one
+   * way door, and finding out the edit went wrong after the only copy has
+   * been overwritten is not a position to put anyone in.
+   */
+  const addTake = useCallback((file: File, seconds: number) => {
+    const id = takeIdRef.current++;
+    setTakes((prev) => [
+      ...prev,
+      {
+        id,
+        file,
+        mb: Math.max(1, Math.round(file.size / 1_048_576)),
+        seconds,
+        url: URL.createObjectURL(file),
+        format: formatOf(file.type),
+      },
+    ]);
+  }, []);
+
   const saveTake = useCallback(
     async (id: number) => {
       const t = takes.find((x) => x.id === id);
@@ -721,6 +759,7 @@ export function useRecorder(filenameHint: string): Recorder {
     pauseRecording,
     resumeRecording,
     takes,
+    addTake,
     canShareTake,
     saveNote,
     saveTake,

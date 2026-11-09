@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Play, Smartphone, Download, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Play, Smartphone, Download, X, Scissors } from "lucide-react";
+import EditRoom from "./EditRoom";
 import type { Take } from "./useRecorder";
 
 /**
@@ -16,9 +17,10 @@ import type { Take } from "./useRecorder";
  * the bad pieces, move the rest around, then save. The same actions,
  * somewhere you would think to look for them.
  *
- * What it does NOT do yet is trim inside a piece. That needs a video
- * encoder in the page and I have not got one running, so rather than a
- * trim handle that silently does nothing, there is none.
+ * Cutting inside a piece lives one step further in, in the editing room,
+ * which is where the sound waves and the quiet spots are. It is a
+ * separate screen because it is a different job: this one is about which
+ * pieces and in what order, that one is about what happens inside one.
  */
 export default function ReviewPanel({
   takes,
@@ -28,6 +30,7 @@ export default function ReviewPanel({
   onSaveUncut,
   onRemove,
   onMove,
+  onEdited,
   onClose,
 }: {
   takes: Take[];
@@ -37,11 +40,14 @@ export default function ReviewPanel({
   onSaveUncut: (id: number) => Promise<void>;
   onRemove: (id: number) => void;
   onMove: (id: number, direction: -1 | 1) => void;
+  /** An edited copy, kept as a new piece beside the one it came from. */
+  onEdited: (file: File, seconds: number) => void;
   onClose: () => void;
 }) {
   const [active, setActive] = useState(0);
   const [playingAll, setPlayingAll] = useState(false);
   const [confirming, setConfirming] = useState<number | null>(null);
+  const [editing, setEditing] = useState<number | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const total = takes.reduce((n, t) => n + t.seconds, 0);
@@ -69,8 +75,20 @@ export default function ReviewPanel({
 
   if (takes.length === 0) return null;
 
+  const beingEdited = takes.find((t) => t.id === editing);
+
   return (
     <div className="absolute inset-0 z-30 flex flex-col bg-bg">
+      {beingEdited && (
+        <EditRoom
+          take={beingEdited}
+          onDone={(file, seconds) => {
+            onEdited(file, seconds);
+            setEditing(null);
+          }}
+          onClose={() => setEditing(null)}
+        />
+      )}
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <p className="text-sm font-semibold text-text">
           Review
@@ -172,6 +190,13 @@ export default function ReviewPanel({
                     {canShare ? <Smartphone size={14} /> : <Download size={14} />}
                     Save this one
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(t.id)}
+                    className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border px-3 text-xs text-muted"
+                  >
+                    <Scissors size={14} /> Edit
+                  </button>
                   {t.uncut && (
                     <button
                       type="button"
@@ -241,5 +266,9 @@ export default function ReviewPanel({
 }
 
 function clock(seconds: number): string {
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  // Rounded first. An edited piece's length is measured from its audio and
+  // comes back as a fraction, which rendered as "0:7.559977324263041"
+  // sitting in the middle of the review list.
+  const whole = Math.max(0, Math.round(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 }
