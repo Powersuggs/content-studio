@@ -83,6 +83,55 @@ check(
   /env\(safe-area-inset-bottom\)/.test(prompter),
 );
 
+console.log("\nThe menu on a phone");
+
+// Aaron: "i cannot see the whole menu or scroll down to ose eit i can only
+// see barly some of the words of history". History is the sixteenth of
+// nineteen items. Measured in a browser at 375x560, only twelve fit.
+const drawer = /Mobile drawer[\s\S]*?<main/.exec(shell)?.[0] ?? "";
+check(
+  "the menu scrolls, so the items past the bottom can be reached",
+  /overflow-y-auto/.test(drawer),
+  "without this the last items, including signing out, are unreachable on a phone",
+);
+check(
+  "the menu is only as tall as the visible screen",
+  /\bh-app\b/.test(drawer),
+  "a full-height fixed box runs under the iOS address bar, the same fault that hid the filming buttons",
+);
+check(
+  "signing out stays put instead of scrolling away with the list",
+  /shrink-0[^"]*">\{accountFooter\}/.test(drawer),
+);
+check(
+  "the menu clears the home indicator at the bottom",
+  /safe-area-inset-bottom/.test(drawer),
+);
+
+const sidebar = /Desktop sidebar[\s\S]*?<\/aside>/.exec(shell)?.[0] ?? "";
+check(
+  "the desktop sidebar scrolls too, for a short laptop window",
+  /overflow-y-auto/.test(sidebar),
+);
+
+console.log("\nControls that cannot work are not shown");
+check(
+  "the full screen button is hidden where the browser refuses it",
+  /fullscreenEnabled/.test(prompter),
+  "it did nothing on his phone and the code already knew why",
+);
+
+console.log("\nReading position");
+check(
+  "the picture sits at the top, not the middle of the screen",
+  /flex items-start justify-center overflow-hidden/.test(prompter),
+  "reading from the middle puts his eyes below the lens in every take",
+);
+check(
+  "the words sit at the top too",
+  !/flex flex-col items-center justify-center px-6 text-center/.test(prompter),
+);
+
 console.log(
   failures.length === 0
     ? `\nAll ${passed} checks passed.\n`
