@@ -155,6 +155,42 @@ window.runJoin = async function () {
   };
 };
 
+// Read the finished sound and measure how violently it moves at the join
+// compared with how it moves normally. A cut made by chopping a waveform
+// at an arbitrary sample leaves a step, and a step is a click.
+window.audioAtJoin = async function (joinAt) {
+  // A source with one unbroken tone all the way through, NOT the one with
+  // deliberate silences in it.
+  //
+  // The first version of this check used that one and failed, because
+  // that source switches its tone on and off with no ramp, so it has a
+  // step of its own at exactly the second being joined to. It was
+  // measuring the test material's click, not the export's. With an
+  // unbroken tone, any step at the join can only have been put there by
+  // the cutting.
+  const src = await makePiece(9, '#00aa00', 240, 320);
+  const res = await exportCut(src, keepRanges(9, [{ start: 3, end: 6 }]));
+  const ctx = new AudioContext();
+  const buf = await ctx.decodeAudioData(await res.blob.arrayBuffer());
+  const d = buf.getChannelData(0);
+  const worstBetween = (from, to) => {
+    let worst = 0;
+    const a = Math.max(1, Math.floor(from * buf.sampleRate));
+    const b = Math.min(d.length, Math.floor(to * buf.sampleRate));
+    for (let i = a; i < b; i++) worst = Math.max(worst, Math.abs(d[i] - d[i - 1]));
+    return worst;
+  };
+  const out = {
+    audioSeconds: buf.duration,
+    atTheJoin: worstBetween(joinAt - 0.08, joinAt + 0.08),
+    // What this signal does between neighbouring samples when nothing is
+    // being cut, which is the only fair thing to compare the join with.
+    typical: worstBetween(0.2, 2.5),
+  };
+  ctx.close();
+  return out;
+};
+
 window.run = async function (cuts) {
   const src = window.src || (window.src = await makeSource());
   const res = await exportCut(src, keepRanges(9, cuts));
@@ -289,6 +325,21 @@ try {
     control.grey > 0,
     "the detector never sees grey, so the test above proves nothing",
   );
+  console.log("\n  The sound across the join");
+  // The cut removes 3s to 6s, so in the finished file the join sits at 3s.
+  const sound = await page.evaluate(() => audioAtJoin(3));
+  check(
+    "the sound does not jump at the cut",
+    sound.atTheJoin <= sound.typical * 2,
+    `the step at the join is ${sound.atTheJoin.toFixed(4)} against a normal ${sound.typical.toFixed(4)}, ` +
+      `which is ${(sound.atTheJoin / sound.typical).toFixed(1)} times bigger and is heard as a click`,
+  );
+  check(
+    "the sound and the picture are the same length",
+    Math.abs(sound.audioSeconds - 6) < 0.2,
+    `sound runs ${sound.audioSeconds.toFixed(3)}s against about 6s of picture`,
+  );
+
   const joined = await page.evaluate(() => runJoin());
   console.log("\n  Joining a 4 second piece and a 3 second piece into one");
   check(

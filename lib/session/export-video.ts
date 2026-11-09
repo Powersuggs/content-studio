@@ -26,6 +26,14 @@
  */
 
 import type { Span } from "./recut";
+
+/**
+ * A canvas track asked for frames by hand rather than on a timer.
+ * requestFrame is not in TypeScript's DOM library.
+ */
+interface CanvasTrack extends MediaStreamTrack {
+  requestFrame?: () => void;
+}
 import { sourceTimeAt } from "./recut";
 
 export interface ExportProgress {
@@ -206,6 +214,9 @@ export async function exportSequence(
     context?.close().catch(() => undefined);
   };
 
+  // Long enough to kill the click, short enough that nobody hears it go.
+  const FADE_SECONDS = 0.012;
+
   try {
     let loaded = -1;
     const load = async (piece: number) => {
@@ -233,11 +244,47 @@ export async function exportSequence(
     // Bound to the element, not to the file, so it survives swapping the
     // source from one piece to the next.
     const tap = context.createMediaElementSource(video);
+    // A fader between the video and the recording, so every cut can be
+    // eased in and out over a few milliseconds. Chopping a waveform at an
+    // arbitrary sample leaves a step, and a step is a click. Measured on
+    // a test export before this existed: the largest jump between two
+    // neighbouring samples in the whole file sat exactly on the cut.
+    const fader = context.createGain();
     const sink = context.createMediaStreamDestination();
-    tap.connect(sink);
+    tap.connect(fader);
+    fader.connect(sink);
+
+    /** Ease the sound down or up, and wait for it to finish. */
+    const fade = async (to: number) => {
+      const now = context!.currentTime;
+      fader.gain.cancelScheduledValues(now);
+      fader.gain.setValueAtTime(fader.gain.value, now);
+      fader.gain.linearRampToValueAtTime(to, now + FADE_SECONDS);
+      await new Promise((r) => setTimeout(r, FADE_SECONDS * 1000 + 5));
+    };
+
+    /*
+     * One canvas frame per video frame, rather than a timer sampling the
+     * video thirty times a second.
+     *
+     * Aaron: "after the edits it doesnt smoth it out it glitches the
+     * video". A free running sampler and the video's own frame rate do
+     * not line up, so some frames get captured twice and others not at
+     * all, which is judder. It is worst on a phone, where re-encoding at
+     * full size in real time leaves little headroom and dropped frames
+     * come out as stutter.
+     *
+     * requestVideoFrameCallback fires once per decoded frame, so the
+     * recording gets exactly the frames the source has, in order. Where
+     * it is missing, fall back to the old timer rather than refusing.
+     */
+    const framesExact =
+      typeof video.requestVideoFrameCallback === "function";
+    const captured = canvas.captureStream(framesExact ? 0 : 30);
+    const videoTrack = captured.getVideoTracks()[0] as CanvasTrack;
 
     const mixed = new MediaStream([
-      ...canvas.captureStream(30).getVideoTracks(),
+      ...captured.getVideoTracks(),
       ...sink.stream.getAudioTracks(),
     ]);
 
@@ -256,7 +303,7 @@ export async function exportSequence(
     recorder.start();
     await video.play();
 
-    const draw = () => {
+    const paintFrame = () => {
       // Fitted, not stretched, and on a black ground so a piece of a
       // different shape sits in bars rather than smearing the last frame
       // of the one before it down the sides.
@@ -269,9 +316,35 @@ export async function exportSequence(
       paint.fillStyle = "#000";
       paint.fillRect(0, 0, canvas.width, canvas.height);
       paint.drawImage(video, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
-      raf = requestAnimationFrame(draw);
     };
-    raf = requestAnimationFrame(draw);
+
+    let frameHandle = 0;
+    const pump = () => {
+      paintFrame();
+      // Hand this exact frame to the recording. Without it a manual
+      // capture stream records nothing at all.
+      videoTrack.requestFrame?.();
+      frameHandle = video.requestVideoFrameCallback(pump);
+    };
+    if (framesExact) {
+      frameHandle = video.requestVideoFrameCallback(pump);
+    } else {
+      const loop = () => {
+        paintFrame();
+        raf = requestAnimationFrame(loop);
+      };
+      raf = requestAnimationFrame(loop);
+    }
+
+    /** Wait until a real frame from the new position has been drawn. */
+    const nextFrame = () =>
+      new Promise<void>((resolve) => {
+        if (framesExact) {
+          video.requestVideoFrameCallback(() => resolve());
+        } else {
+          setTimeout(resolve, 80);
+        }
+      });
 
     await new Promise<void>((resolve, reject) => {
       const abort = () => reject(new Error("Stopped."));
@@ -294,13 +367,23 @@ export async function exportSequence(
           // stretch nor the gap between two pieces is ever written. The
           // same trick the live silence cutting uses, which is why the
           // joins need no encoder.
+          //
+          // Order matters all the way through. Ease the sound out BEFORE
+          // pausing, so the fade is recorded and the cut is not a step.
+          // Then, on the far side, wait for a real frame from the new
+          // position to be drawn before letting the recorder run again,
+          // or the first thing written is whatever the canvas was still
+          // holding from before the jump.
+          await fade(0);
           recorder?.pause();
           video.pause();
           await load(next.piece);
           video.currentTime = next.start;
           await once(video, "seeked").catch(() => undefined);
           await video.play().catch(() => undefined);
+          await nextFrame();
           recorder?.resume();
+          await fade(1);
         }
 
         options.onProgress?.({
@@ -315,6 +398,12 @@ export async function exportSequence(
     });
 
     cancelAnimationFrame(raf);
+    if (framesExact && frameHandle) {
+      video.cancelVideoFrameCallback(frameHandle);
+    }
+    // Ease out at the end too, so the last thing in the file is not a
+    // waveform stopping mid swing.
+    await fade(0);
     recorder.stop();
     await finished;
 

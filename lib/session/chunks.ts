@@ -102,16 +102,14 @@ export function chunkScript(hook: string, body: string): string[] {
   return chunks.filter(Boolean);
 }
 
-/**
- * How long to hold a chunk, in milliseconds.
+/*
+ * holdMs used to live here: how long to leave a chunk on screen before
+ * moving to the next one by itself.
  *
- * Paced on words rather than characters: people read and speak in words,
- * and a chunk of six short words is not half the work of one with six
- * long ones. A floor of a second and a half stops a three-word line
- * flashing past before the eye reaches it.
+ * Removed when Aaron said "the single lines automatically push to the
+ * next one without me clicking the screen for next". A few lines at a
+ * time now waits for a tap, every time, so there is nothing left to
+ * time. It went rather than being left unused, along with the speaking
+ * pace dial that drove it, because a setting that changes nothing is
+ * worse than no setting.
  */
-export function holdMs(chunk: string, wordsPerMinute: number): number {
-  const words = chunk.trim().split(/\s+/).filter(Boolean).length;
-  const wpm = Math.max(40, wordsPerMinute);
-  return Math.max(1500, Math.round((words / wpm) * 60_000));
-}
