@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { wantsTallerCrop } from "@/lib/session/framing";
 
 /**
  * Camera and recording for Session Mode.
@@ -98,6 +99,11 @@ export interface Take {
 
 export interface Recorder {
   state: CameraState;
+  /**
+   * Width divided by height of the frames the camera is actually sending,
+   * so the preview can be drawn at that shape instead of cropped to fill.
+   */
+  aspect: number;
   /** Live microphone level, 0 to 1, for the meter. */
   level: number;
   /** Cut the quiet parts out while recording. */
@@ -160,6 +166,16 @@ export interface Recorder {
 
 export function useRecorder(filenameHint: string): Recorder {
   const [state, setState] = useState<CameraState>("off");
+  /**
+   * Width divided by height of the frames actually coming from the camera.
+   *
+   * The preview is drawn at this shape so that what he sees is what is
+   * being recorded. It used to be stretched to fill the screen, which is
+   * taller than any camera frame, so the sides were quietly cut off the
+   * picture, leaving a preview tighter than the recording, which is the worst
+   * way round to get it. 9/16 only until the camera answers.
+   */
+  const [aspect, setAspect] = useState(9 / 16);
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -346,10 +362,47 @@ export function useRecorder(filenameHint: string): Recorder {
     setState("starting");
     setError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 1080 }, height: { ideal: 1920 } },
+      // Ask for a big picture, NOT a tall one.
+      //
+      // This used to say width 1080, height 1920, which is 9:16, the shape
+      // of a reel. An iPhone's front camera sensor is 4:3, so the only way
+      // to honour that is to throw away about a quarter of the width before
+      // the frame ever reaches us. Aaron saw the result immediately: "i dont
+      // like how the camera seemed zoom in on it". He was right, and nothing
+      // he could do about it, because the crop happened in the camera.
+      //
+      // Asking for width alone lets every device hand over its natural full
+      // frame. What a reel will keep is drawn on top as a guide instead, so
+      // the framing is his decision rather than one made for him in silence.
+      let stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 1920 } },
         audio: true,
       });
+      let shot = stream.getVideoTracks()[0]?.getSettings();
+
+      // A laptop webcam is the opposite problem. Its natural frame is wide,
+      // and a wide frame is not a reel, so here the crop is the whole point:
+      // without it he would film a letterbox and find out at posting time.
+      // Only the phone, whose sensor is already tall, gets left alone.
+      //
+      // Reshaped on the track we already hold rather than by opening a
+      // second stream. Asking the same camera for a second stream while the
+      // first is still live is how you get a refusal, or worse a silently
+      // downgraded mode, and on a phone it can mean a second permission
+      // prompt in the middle of setting up to film.
+      const track = stream.getVideoTracks()[0];
+      if (track && shot && wantsTallerCrop(shot.width ?? 0, shot.height ?? 0)) {
+        try {
+          await track.applyConstraints({
+            width: { ideal: 1080 },
+            height: { ideal: 1920 },
+          });
+          shot = track.getSettings();
+        } catch {
+          // Keep the wide frame. A wide preview he can see beats no preview.
+        }
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -357,6 +410,12 @@ export function useRecorder(filenameHint: string): Recorder {
         videoRef.current.muted = true;
         videoRef.current.playsInline = true;
         await videoRef.current.play().catch(() => undefined);
+      }
+      // The real shape of what is being recorded, so the preview can be
+      // drawn at exactly that shape. Read from the track rather than
+      // assumed, because every device answers this question differently.
+      if (shot?.width && shot?.height) {
+        setAspect(shot.width / shot.height);
       }
       startMeter(stream);
       setState("on");
@@ -642,6 +701,7 @@ export function useRecorder(filenameHint: string): Recorder {
 
   return {
     state,
+    aspect,
     error,
     recording,
     elapsed,

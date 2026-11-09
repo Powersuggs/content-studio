@@ -52,6 +52,11 @@ function Brand() {
  * data deletion page as a stranger.
  */
 const BARE_PATHS = [
+  // Filming has no use for a hamburger menu, and on a phone the mobile top
+  // bar was stacked on top of a screen already asking for the full height,
+  // which pushed the record button under the fold. The teleprompter carries
+  // its own way out.
+  "/session-mode",
   "/login",
   "/signup",
   "/instagram-data-deletion",

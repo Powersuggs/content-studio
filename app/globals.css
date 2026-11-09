@@ -39,3 +39,23 @@ body {
   background: var(--accent);
   color: var(--bg);
 }
+
+/*
+ * The height of what you can actually see, which on a phone is not 100vh.
+ *
+ * iOS Safari defines vh as the height with its toolbars HIDDEN. A screen
+ * built to 100vh is therefore taller than the window by the height of the
+ * address bar, and whatever sits at the bottom of it -- on the filming
+ * screen, every button -- is pushed under the toolbar until you scroll.
+ * Aaron hit exactly that: "i have to scrol down the whole page just to get
+ * all buttons to show".
+ *
+ * dvh is the live height of the visible area, so the bar lands on screen.
+ * The vh line above it is the fallback for anything too old to know dvh;
+ * browsers that understand the second declaration use it and ignore the
+ * first.
+ */
+.h-app {
+  height: 100vh;
+  height: 100dvh;
+}
