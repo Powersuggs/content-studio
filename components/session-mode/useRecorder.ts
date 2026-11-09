@@ -48,6 +48,13 @@ function extensionFor(mimeType: string | undefined): string {
   return mimeType.includes("mp4") ? "mp4" : "webm";
 }
 
+function formatOf(mimeType: string | undefined): TakeFormat {
+  if (!mimeType) return "other";
+  if (mimeType.includes("mp4")) return "mp4";
+  if (mimeType.includes("webm")) return "webm";
+  return "other";
+}
+
 export type CameraState = "off" | "starting" | "on" | "error";
 
 /**
@@ -62,6 +69,9 @@ const SILENCE_HOLD_MS = 700;
 /** How often the level is measured. Cheap, and 20 a second is plenty. */
 const METER_MS = 50;
 
+/** What the file actually is, which is not the same on every phone. */
+export type TakeFormat = "mp4" | "webm" | "other";
+
 export interface Take {
   /** Stable across reorders and deletions, unlike an array index. */
   id: number;
@@ -74,6 +84,16 @@ export interface Take {
   url: string;
   /** The same take with nothing cut out, where cutting was on. */
   uncut?: File;
+  /**
+   * mp4, webm, or something else.
+   *
+   * Phones do not agree. iPhones record mp4. Chrome on Android usually
+   * does now and used to not. Firefox records webm. Instagram takes mp4
+   * and does not take webm, so which one came out is the difference
+   * between a video he can post and one he cannot, and he should not
+   * find that out at the upload screen.
+   */
+  format: TakeFormat;
 }
 
 export interface Recorder {
@@ -123,25 +143,19 @@ export interface Recorder {
    */
   takes: Take[];
   canShareTake: boolean;
-  shareTake: (id: number) => Promise<void>;
-  downloadTake: (id: number) => void;
-  shareUncut: (id: number) => Promise<void>;
+  /**
+   * What the last save actually did, in words.
+   *
+   * Saving used to be silent in both directions. On an iPhone it fell
+   * through to an ordinary download link, which Safari ignores for
+   * video, so the button did nothing at all and said nothing about it.
+   */
+  saveNote: string | null;
+  saveTake: (id: number) => Promise<void>;
+  saveUncut: (id: number) => Promise<void>;
   removeTake: (id: number) => void;
   moveTake: (id: number, direction: -1 | 1) => void;
   clearTakes: () => void;
-}
-
-/** Hands a file to the downloads folder. */
-function downloadFile(file: File) {
-  const url = URL.createObjectURL(file);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = file.name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Revoking immediately can cancel the download on some browsers.
-  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 export function useRecorder(filenameHint: string): Recorder {
@@ -169,6 +183,7 @@ export function useRecorder(filenameHint: string): Recorder {
   const pausedRef = useRef(false);
   pausedRef.current = paused;
   const [canShareTake, setCanShareTake] = useState(false);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
   // Read inside the recorder's onstop, which closes over the moment it
   // was created, so the current value has to come through a ref.
   const canShareRef = useRef(false);
@@ -408,6 +423,7 @@ export function useRecorder(filenameHint: string): Recorder {
         seconds: elapsedRef.current,
         url: URL.createObjectURL(blob),
         uncut: pendingUncutRef.current ?? undefined,
+        format: formatOf(type),
       };
       pendingUncutRef.current = null;
       setTakes((prev) => [...prev, piece]);
@@ -514,52 +530,90 @@ export function useRecorder(filenameHint: string): Recorder {
     [takes],
   );
 
-  const shareTake = useCallback(
-    async (id: number) => {
-      const t = byId(id);
-      if (!t) return;
-      try {
-        await navigator.share({ files: [t.file], title: "Take" });
-      } catch (err) {
-        // Closing the sheet is a thing people do on purpose.
-        if ((err as Error)?.name !== "AbortError") {
-          setError("That share was refused. Saving it to your downloads instead.");
-          downloadFile(t.file);
-        }
-      }
-    },
-    [byId],
-  );
-
-  const downloadTake = useCallback(
-    (id: number) => {
-      const t = byId(id);
-      if (t) downloadFile(t.file);
-    },
-    [byId],
-  );
-
-  const shareUncut = useCallback(
-    async (id: number) => {
-      const t = byId(id);
-      if (!t?.uncut) return;
-      try {
-        await navigator.share({ files: [t.uncut], title: "Uncut take" });
-      } catch (err) {
-        if ((err as Error)?.name !== "AbortError") downloadFile(t.uncut);
-      }
-    },
-    [byId],
-  );
-
   /**
-   * Throws a piece away, and the memory with it.
+   * Gets one piece off the page and onto the phone.
    *
-   * Each piece holds an object URL so it can be played back. Dropping
-   * the row without revoking it leaks the whole video for as long as the
-   * page is open, which on a phone is how a filming session ends in a
-   * crash after the sixth take.
+   * Three routes, tried in order, because no single one works
+   * everywhere. The share sheet is the good one: it reaches Photos and
+   * Instagram directly. A download is fine on a computer. On an iPhone
+   * neither may be available, and an ignored download link is the worst
+   * possible outcome because it looks identical to success.
+   *
+   * So the last resort opens the video in a new tab, where iOS gives a
+   * share button of its own, and every route says out loud what it did.
    */
+  const saveFile = useCallback(async (file: File) => {
+    setSaveNote(null);
+
+    // Asked about THIS file rather than a stand-in. A browser can take
+    // an mp4 and refuse a webm, and the probe at startup cannot know
+    // which one the recorder ended up producing.
+    let shareable = false;
+    try {
+      shareable =
+        typeof navigator.share === "function" &&
+        typeof navigator.canShare === "function" &&
+        navigator.canShare({ files: [file] });
+    } catch {
+      shareable = false;
+    }
+
+    if (shareable) {
+      try {
+        await navigator.share({ files: [file], title: file.name });
+        setSaveNote("Shared. If you chose Save Video it is in your photos now.");
+        return;
+      } catch (err) {
+        if ((err as Error)?.name === "AbortError") {
+          setSaveNote("Share closed, nothing saved.");
+          return;
+        }
+        // Fall through and try the other routes.
+      }
+    }
+
+    const url = URL.createObjectURL(file);
+    try {
+      const a = document.createElement("a");
+      const canDownload = "download" in a;
+      if (canDownload) {
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setSaveNote(`Saved as ${file.name} in your downloads.`);
+      } else {
+        const opened = window.open(url, "_blank");
+        setSaveNote(
+          opened
+            ? "Opened the video in a new tab. Use the share or save button there."
+            : "Could not save it here. Open this page in your normal browser rather than from a home screen icon.",
+        );
+      }
+    } finally {
+      // Revoking straight away can cancel the download, and kills a tab
+      // that is still loading the video.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }
+  }, []);
+
+  const saveTake = useCallback(
+    async (id: number) => {
+      const t = takes.find((x) => x.id === id);
+      if (t) await saveFile(t.file);
+    },
+    [takes, saveFile],
+  );
+
+  const saveUncut = useCallback(
+    async (id: number) => {
+      const t = takes.find((x) => x.id === id);
+      if (t?.uncut) await saveFile(t.uncut);
+    },
+    [takes, saveFile],
+  );
+
   const removeTake = useCallback((id: number) => {
     setTakes((prev) => {
       const gone = prev.find((t) => t.id === id);
@@ -608,9 +662,9 @@ export function useRecorder(filenameHint: string): Recorder {
     resumeRecording,
     takes,
     canShareTake,
-    shareTake,
-    downloadTake,
-    shareUncut,
+    saveNote,
+    saveTake,
+    saveUncut,
     removeTake,
     moveTake,
     clearTakes,

@@ -1,0 +1,245 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, Play, Smartphone, Download, X } from "lucide-react";
+import type { Take } from "./useRecorder";
+
+/**
+ * The step between filming and saving.
+ *
+ * Deleting a piece from a row in the control bar is technically editing
+ * and does not feel like it. Aaron filmed, looked for somewhere to edit,
+ * and did not find one, which means the place to do it has to be a
+ * place, not a row of small buttons under the camera.
+ *
+ * So this is a screen: watch the whole thing back in order, throw away
+ * the bad pieces, move the rest around, then save. The same actions,
+ * somewhere you would think to look for them.
+ *
+ * What it does NOT do yet is trim inside a piece. That needs a video
+ * encoder in the page and I have not got one running, so rather than a
+ * trim handle that silently does nothing, there is none.
+ */
+export default function ReviewPanel({
+  takes,
+  canShare,
+  saveNote,
+  onSave,
+  onSaveUncut,
+  onRemove,
+  onMove,
+  onClose,
+}: {
+  takes: Take[];
+  canShare: boolean;
+  saveNote: string | null;
+  onSave: (id: number) => Promise<void>;
+  onSaveUncut: (id: number) => Promise<void>;
+  onRemove: (id: number) => void;
+  onMove: (id: number, direction: -1 | 1) => void;
+  onClose: () => void;
+}) {
+  const [active, setActive] = useState(0);
+  const [playingAll, setPlayingAll] = useState(false);
+  const [confirming, setConfirming] = useState<number | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const total = takes.reduce((n, t) => n + t.seconds, 0);
+  const current = takes[Math.min(active, takes.length - 1)];
+
+  // Playing the pieces end to end, which is the only way to tell whether
+  // the order is right. Stepping to the next one on ended rather than
+  // stitching anything: no encoder needed to watch it in order.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onEnded = () => {
+      if (!playingAll) return;
+      if (active < takes.length - 1) setActive((i) => i + 1);
+      else setPlayingAll(false);
+    };
+    v.addEventListener("ended", onEnded);
+    return () => v.removeEventListener("ended", onEnded);
+  }, [playingAll, active, takes.length]);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (v && playingAll) v.play().catch(() => setPlayingAll(false));
+  }, [active, playingAll]);
+
+  if (takes.length === 0) return null;
+
+  return (
+    <div className="absolute inset-0 z-30 flex flex-col bg-bg">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <p className="text-sm font-semibold text-text">
+          Review
+          <span className="ml-2 text-xs font-normal text-faint">
+            {takes.length} piece{takes.length === 1 ? "" : "s"}, {clock(total)}
+          </span>
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="ml-auto flex h-10 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted"
+        >
+          <X size={15} /> Back to filming
+        </button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="mx-auto max-w-2xl space-y-3">
+          {current && (
+            <div className="space-y-2">
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <video
+                ref={videoRef}
+                key={current.id}
+                src={current.url}
+                controls
+                playsInline
+                className="max-h-[45vh] w-full rounded-lg bg-black"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActive(0);
+                    setPlayingAll(true);
+                  }}
+                  className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-accent px-3 text-sm font-medium text-accent"
+                >
+                  <Play size={15} />
+                  {playingAll ? "Playing all" : "Play all in order"}
+                </button>
+                <span className="text-xs text-faint">
+                  Piece {Math.min(active, takes.length - 1) + 1} of {takes.length}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <ul className="space-y-1">
+            {takes.map((t, i) => (
+              <li
+                key={t.id}
+                className={`rounded-lg border p-2 ${
+                  i === active ? "border-accent bg-accent/5" : "border-border bg-panel"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlayingAll(false);
+                      setActive(i);
+                    }}
+                    className="min-w-0 flex-1 text-left text-xs text-text"
+                  >
+                    <span className="mr-2 text-faint">{i + 1}</span>
+                    {clock(t.seconds)}
+                    <span className="ml-2 text-faint">
+                      {t.mb} MB, {t.format.toUpperCase()}
+                      {t.uncut ? ", cut" : ""}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onMove(t.id, -1)}
+                    disabled={i === 0}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-border text-muted disabled:opacity-25"
+                    aria-label="Move earlier"
+                  >
+                    <ArrowUp size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onMove(t.id, 1)}
+                    disabled={i === takes.length - 1}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-border text-muted disabled:opacity-25"
+                    aria-label="Move later"
+                  >
+                    <ArrowDown size={15} />
+                  </button>
+                </div>
+
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onSave(t.id)}
+                    className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-accent px-3 text-xs font-medium text-accent"
+                  >
+                    {canShare ? <Smartphone size={14} /> : <Download size={14} />}
+                    Save this one
+                  </button>
+                  {t.uncut && (
+                    <button
+                      type="button"
+                      onClick={() => onSaveUncut(t.id)}
+                      className="inline-flex h-10 items-center rounded-lg border border-border px-3 text-xs text-muted"
+                    >
+                      Save uncut
+                    </button>
+                  )}
+                  {confirming === t.id ? (
+                    <span className="ml-auto flex items-center gap-2 text-[11px]">
+                      <span className="text-warn">Gone for good.</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onRemove(t.id);
+                          setConfirming(null);
+                          setActive(0);
+                        }}
+                        className="rounded-full border border-warn px-2 py-1 text-warn"
+                      >
+                        Delete
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirming(null)}
+                        className="rounded-full border border-border px-2 py-1 text-muted"
+                      >
+                        Keep
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirming(t.id)}
+                      className="ml-auto text-xs text-faint underline underline-offset-2 hover:text-warn"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {takes.some((t) => t.format !== "mp4") && (
+            <p className="text-[11px] text-warn">
+              This browser records in{" "}
+              {takes.find((t) => t.format !== "mp4")?.format.toUpperCase()}, not
+              MP4. Instagram takes MP4. If a piece will not upload, that is why,
+              and recording in Chrome or Safari usually gives MP4 instead.
+            </p>
+          )}
+
+          {saveNote && <p className="text-[11px] text-accent">{saveNote}</p>}
+
+          <p className="text-[11px] text-faint">
+            Save every piece you want to keep. They live in this page only, so
+            leaving or reloading loses anything unsaved. Trimming inside a piece
+            is not here yet: cut what you can with Hold while filming, and bin
+            whole pieces here.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function clock(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}

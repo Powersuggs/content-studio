@@ -1,4 +1,4 @@
-import { getQueuedScripts } from "@/lib/queries";
+import { getQueuedScripts, getFilmedScripts } from "@/lib/queries";
 import Teleprompter, { type QueuedScriptItem } from "@/components/session-mode/Teleprompter";
 import SetupNotice from "@/components/SetupNotice";
 import { safeLoad } from "@/lib/db-errors";
@@ -30,11 +30,22 @@ export default async function SessionModePage() {
       </div>
     );
   }
+  const [filmed] = await safeLoad(
+    () => getFilmedScripts(10),
+    [] as Awaited<ReturnType<typeof getFilmedScripts>>,
+    "session-mode",
+  );
+
   const items: QueuedScriptItem[] = scripts.map((s) => ({
     id: s.id,
     hook: s.hook ?? "",
     body: extractScriptBody(s.body),
   }));
 
-  return <Teleprompter scripts={items} />;
+  return (
+    <Teleprompter
+      scripts={items}
+      filmed={filmed.map((s) => ({ id: s.id, hook: s.hook ?? "Untitled" }))}
+    />
+  );
 }
