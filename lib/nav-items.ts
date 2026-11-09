@@ -17,6 +17,7 @@ import {
   Mail,
   Images,
   CalendarDays,
+  ShieldCheck,
 } from "lucide-react";
 
 export interface NavItem {
@@ -42,5 +43,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/boards", label: "Discover Boards", icon: Layers },
   { href: "/inspiration", label: "Inspiration", icon: Compass },
   { href: "/history", label: "History", icon: History },
+  { href: "/health", label: "Database check", icon: ShieldCheck },
   { href: "/settings", label: "Sources & Facts", icon: BookMarked },
 ];
