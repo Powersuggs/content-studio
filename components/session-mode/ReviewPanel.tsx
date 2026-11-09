@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Play, Smartphone, Download, X, Scissors } from "lucide-react";
+import { ArrowDown, ArrowUp, Play, Smartphone, Download, X, Scissors, Combine } from "lucide-react";
 import EditRoom from "./EditRoom";
+import { canExport, exportSequence } from "@/lib/session/export-video";
 import type { Take } from "./useRecorder";
 
 /**
@@ -41,13 +42,69 @@ export default function ReviewPanel({
   onRemove: (id: number) => void;
   onMove: (id: number, direction: -1 | 1) => void;
   /** An edited copy, kept as a new piece beside the one it came from. */
-  onEdited: (file: File, seconds: number) => void;
+  onEdited: (file: File, seconds: number, note?: string) => void;
   onClose: () => void;
 }) {
   const [active, setActive] = useState(0);
   const [playingAll, setPlayingAll] = useState(false);
   const [confirming, setConfirming] = useState<number | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
+  const [joining, setJoining] = useState(false);
+  const [joinProgress, setJoinProgress] = useState(0);
+  const [joinProblem, setJoinProblem] = useState<string | null>(null);
+  const [canMakeVideo, setCanMakeVideo] = useState<boolean | null>(null);
+  const joinAbort = useRef<AbortController | null>(null);
+
+  // Asked with the real pieces rather than guessed, so the button is not
+  // offered to a browser that will refuse it.
+  useEffect(() => {
+    let alive = true;
+    canExport().then((r) => alive && setCanMakeVideo(r.ok));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => () => joinAbort.current?.abort(), []);
+
+  /**
+   * Put every piece together, in the order shown, into one video.
+   *
+   * This is the step that was missing. He films in pieces on purpose, a
+   * fluffed line costing one piece rather than the whole reel, and then
+   * had three separate files and no way to join them without leaving the
+   * app. Same machinery as cutting: play them in order into one recorder.
+   */
+  const joinAll = async () => {
+    setJoinProblem(null);
+    const controller = new AbortController();
+    joinAbort.current = controller;
+    setJoining(true);
+    setJoinProgress(0);
+    try {
+      const result = await exportSequence(
+        takes.map((t) => ({ source: t.file, ranges: [{ start: 0, end: t.seconds }] })),
+        { signal: controller.signal, onProgress: (p) => setJoinProgress(p.done) },
+      );
+      const extension = result.type.includes("mp4") ? "mp4" : "webm";
+      onEdited(
+        new File([result.blob], `session-joined.${extension}`, { type: result.type }),
+        result.seconds,
+        `joined from ${takes.length}`,
+      );
+    } catch (err) {
+      setJoinProblem(
+        err instanceof Error && err.message === "Stopped."
+          ? "Stopped. Nothing was changed."
+          : `Could not join them: ${
+              err instanceof Error ? err.message : "the browser gave no reason."
+            } Your pieces are all still here.`,
+      );
+    } finally {
+      setJoining(false);
+      joinAbort.current = null;
+    }
+  };
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const total = takes.reduce((n, t) => n + t.seconds, 0);
@@ -83,7 +140,7 @@ export default function ReviewPanel({
         <EditRoom
           take={beingEdited}
           onDone={(file, seconds) => {
-            onEdited(file, seconds);
+            onEdited(file, seconds, "cut down");
             setEditing(null);
           }}
           onClose={() => setEditing(null)}
@@ -130,11 +187,49 @@ export default function ReviewPanel({
                   <Play size={15} />
                   {playingAll ? "Playing all" : "Play all in order"}
                 </button>
+                {takes.length > 1 && canMakeVideo !== false && !joining && (
+                  <button
+                    type="button"
+                    onClick={joinAll}
+                    className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted"
+                  >
+                    <Combine size={15} />
+                    Join into one video
+                  </button>
+                )}
                 <span className="text-xs text-faint">
                   Piece {Math.min(active, takes.length - 1) + 1} of {takes.length}
                 </span>
               </div>
             </div>
+          )}
+
+          {joining && (
+            <div className="space-y-2 rounded-lg border border-border bg-panel p-3">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-panel-2">
+                <div
+                  className="h-full bg-accent transition-[width] duration-200"
+                  style={{ width: `${Math.round(joinProgress * 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted">
+                Joining your {takes.length} pieces. This plays them through
+                to record them, so it takes about {Math.ceil(total)} seconds.
+                Leave this screen open.
+              </p>
+              <button
+                type="button"
+                onClick={() => joinAbort.current?.abort()}
+                className="h-9 rounded-lg border border-border px-3 text-xs text-muted"
+              >
+                Stop
+              </button>
+            </div>
+          )}
+          {joinProblem && (
+            <p className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">
+              {joinProblem}
+            </p>
           )}
 
           <ul className="space-y-1">
@@ -160,6 +255,11 @@ export default function ReviewPanel({
                       {t.mb} MB, {t.format.toUpperCase()}
                       {t.uncut ? ", cut" : ""}
                     </span>
+                    {t.note && (
+                      <span className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] text-accent">
+                        {t.note}
+                      </span>
+                    )}
                   </button>
                   <button
                     type="button"
