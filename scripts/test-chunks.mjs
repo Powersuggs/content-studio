@@ -15,7 +15,7 @@ const out = mkdtempSync(join(tmpdir(), "chunks-"));
 execFileSync("npx", ["tsc", "lib/session/chunks.ts", "--outDir", out, "--module", "es2022",
   "--target", "es2022", "--moduleResolution", "bundler", "--noEmitOnError"],
   { cwd: ROOT, stdio: "pipe" });
-const { chunkScript, holdMs, CHUNK_TARGET } =
+const { chunkScript, CHUNK_TARGET } =
   await import(pathToFileURL(join(out, "chunks.js")).href);
 
 let f = 0;
@@ -65,12 +65,6 @@ ok("a long sentence breaks at a comma, not mid-clause",
   JSON.stringify(byComma));
 
 // Pacing
-ok("a longer line is held longer", holdMs("one two three four five six seven eight nine ten", 120) > holdMs("one two", 120),
-  "pacing does not follow length");
-ok("A THREE WORD LINE DOES NOT FLASH PAST", holdMs("stop doing that", 200) >= 1500,
-  String(holdMs("stop doing that", 200)));
-ok("a silly words-per-minute cannot make it instant", holdMs("a b c d e f g h", 1) > 1500,
-  String(holdMs("a b c d e f g h", 1)));
 
 console.log(`\n  target ${CHUNK_TARGET} chars; his short became ${c.length} chunks`);
 console.log(f === 0 ? "\nchunks: all checks passed." : `\nchunks: ${f} FAILED.`);

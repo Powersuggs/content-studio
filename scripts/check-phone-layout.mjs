@@ -121,6 +121,38 @@ check(
   "it did nothing on his phone and the code already knew why",
 );
 
+console.log("\nA few lines at a time waits for him");
+
+// Aaron: "the single lines automatically push to the next one without me
+// clicking the screen for next ... we need to make sure if i am selecting
+// a few lines it goes to the next one when i click the screen".
+check(
+  "nothing advances the lines on a timer any more",
+  !/holdMs/.test(prompter),
+  "a timer moved the words on while he was still saying them",
+);
+check(
+  "tapping the screen is what moves them on",
+  /onClick=\{\(\) => setChunk\(/.test(prompter),
+);
+check(
+  "the speaking pace dial went with the timer it drove",
+  !/Speaking pace/.test(prompter),
+  "a setting that changes nothing is worse than no setting",
+);
+check(
+  "play is hidden where there is nothing to play",
+  (() => {
+    // Checked by structure rather than one long pattern, which broke on a
+    // comment sitting between the guard and the button.
+    const guard = prompter.indexOf('{mode !== "lines" && (');
+    if (guard === -1) return false;
+    const close = prompter.indexOf("</button>", guard);
+    return close !== -1 && prompter.slice(guard, close).includes("aria-label={playing");
+  })(),
+  "it would toggle a flag that nothing reads",
+);
+
 console.log("\nReading position");
 check(
   "the picture sits at the top, not the middle of the screen",

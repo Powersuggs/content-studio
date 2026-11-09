@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { markFilmedAction, unfilmScriptAction } from "@/app/session-mode/actions";
 import { useRecorder, type Take } from "./useRecorder";
-import { chunkScript, holdMs } from "@/lib/session/chunks";
+import { chunkScript } from "@/lib/session/chunks";
 import ReviewPanel from "./ReviewPanel";
 
 export interface QueuedScriptItem {
@@ -83,7 +83,6 @@ export default function Teleprompter({
   const [reviewing, setReviewing] = useState(false);
   const [chunk, setChunk] = useState(0);
   /** Words a minute, the pace in lines mode. Speed means something else there. */
-  const [wpm, setWpm] = useState(130);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -127,7 +126,6 @@ export default function Teleprompter({
       if (typeof saved?.textSize === "number") setTextSize(saved.textSize);
       if (typeof saved?.scrim === "number") setScrim(saved.scrim);
       if (saved?.mode === "lines" || saved?.mode === "scroll") setMode(saved.mode);
-      if (typeof saved?.wpm === "number") setWpm(saved.wpm);
     } catch {
       // Private browsing, a cleared store, or nonsense in the slot. The
       // defaults are fine; losing a setting is not worth a broken page.
@@ -138,12 +136,12 @@ export default function Teleprompter({
     try {
       localStorage.setItem(
         SETTINGS_KEY,
-        JSON.stringify({ speed, textSize, scrim, mode, wpm }),
+        JSON.stringify({ speed, textSize, scrim, mode }),
       );
     } catch {
       /* storage full or refused; the prompter still works */
     }
-  }, [speed, textSize, scrim, mode, wpm]);
+  }, [speed, textSize, scrim, mode]);
 
   const current = remaining[index] as QueuedScriptItem | undefined;
   const chunks = useMemo(
@@ -189,15 +187,20 @@ export default function Teleprompter({
    * the work of six long ones. It stops at the last line rather than
    * looping, because looping during a take is how you lose your place.
    */
-  useEffect(() => {
-    if (mode !== "lines" || !playing) return;
-    if (chunk >= chunks.length - 1) {
-      setPlaying(false);
-      return;
-    }
-    const t = setTimeout(() => setChunk((c) => c + 1), holdMs(chunks[chunk] ?? "", wpm));
-    return () => clearTimeout(t);
-  }, [mode, playing, chunk, chunks, wpm]);
+  /*
+   * A few lines at a time does NOT move on by itself.
+   *
+   * Aaron: "the single lines automatically push to the next one without
+   * me clicking the screen for next ... we need to make sure if i am
+   * selecting a few lines it goes to the next one when i click the
+   * screen". It used to run on a timer worked out from the word count,
+   * which meant the words moved while he was still saying them and the
+   * only way to keep up was to race the clock.
+   *
+   * The two modes now mean two different things, which is the point of
+   * having both. Scrolling paces itself and he reads along. A few lines
+   * waits for him, every time, and the whole screen is the button.
+   */
 
   useEffect(() => {
     if (!playing) {
@@ -572,14 +575,19 @@ export default function Teleprompter({
 
           {/* Front row: the three things you touch while filming. */}
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPlaying((p) => !p)}
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent text-bg"
-              aria-label={playing ? "Pause" : "Play"}
-            >
-              {playing ? <Pause size={20} /> : <Play size={20} />}
-            </button>
+            {/* Play starts and stops the scroll. In a few lines mode
+                there is nothing to start: the screen waits for a tap, so
+                the button would sit there doing nothing. */}
+            {mode !== "lines" && (
+              <button
+                type="button"
+                onClick={() => setPlaying((p) => !p)}
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent text-bg"
+                aria-label={playing ? "Pause" : "Play"}
+              >
+                {playing ? <Pause size={20} /> : <Play size={20} />}
+              </button>
+            )}
 
             {/* Pause keeps the take open: stop talking, walk somewhere
                 else, carry on, and it is still one video. Only while
@@ -733,15 +741,10 @@ export default function Teleprompter({
                 </div>
               </div>
 
-              {mode === "lines" ? (
-                <Dial
-                  label="Speaking pace"
-                  value={wpm}
-                  min={60}
-                  max={220}
-                  onChange={setWpm}
-                />
-              ) : (
+              {/* Speed belongs to scrolling. A few lines waits for a tap,
+                  so there is no pace to set, and a dial that changes
+                  nothing is the same fault as the full screen button. */}
+              {mode !== "lines" && (
                 <Dial label="Speed" value={speed} min={5} max={150} onChange={setSpeed} />
               )}
               <Dial label="Text size" value={textSize} min={18} max={56} onChange={setTextSize} />
