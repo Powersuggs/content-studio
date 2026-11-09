@@ -16,9 +16,11 @@ import {
   Smartphone,
   Download,
   SlidersHorizontal,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { markFilmedAction } from "@/app/session-mode/actions";
-import { useRecorder } from "./useRecorder";
+import { useRecorder, type Take } from "./useRecorder";
 
 export interface QueuedScriptItem {
   id: number;
@@ -284,42 +286,20 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
           how you end up tapping Mark filmed when you meant Record. */}
       <div className="shrink-0 border-t border-border bg-panel px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto max-w-3xl space-y-2">
-          {/* The take, once there is one. Top of the controls because it
-              is the thing to deal with before anything else happens. */}
-          {camera.take && (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-accent/40 bg-accent/5 p-2">
-              <span className="text-xs text-accent">
-                Take saved, {camera.take.mb} MB
-                {camera.fullTake ? " (cut)" : ""}
-              </span>
-              <button
-                type="button"
-                onClick={camera.canShareTake ? camera.shareTake : camera.downloadTake}
-                className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-accent px-3 text-sm font-medium text-accent"
-              >
-                {camera.canShareTake ? <Smartphone size={15} /> : <Download size={15} />}
-                {camera.canShareTake ? "Save to my photos" : "Save again"}
-              </button>
-              {camera.fullTake && (
-                <button
-                  type="button"
-                  onClick={
-                    camera.canShareTake ? camera.shareFullTake : camera.downloadFullTake
-                  }
-                  className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted"
-                  title="The same take with nothing cut out"
-                >
-                  Uncut, {camera.fullTake.mb} MB
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={camera.clearTake}
-                className="ml-auto text-xs text-faint underline underline-offset-2 hover:text-warn"
-              >
-                Discard
-              </button>
-            </div>
+          {/* The pieces, newest at the bottom, in the order they go out.
+              A list rather than one slot because filming is three goes at
+              the opening, one good middle, and a closing line after a cup
+              of tea. A fluffed line should cost one piece, not the reel. */}
+          {camera.takes.length > 0 && (
+            <TakeList
+              takes={camera.takes}
+              canShare={camera.canShareTake}
+              onSave={camera.canShareTake ? camera.shareTake : camera.downloadTake}
+              onSaveUncut={camera.shareUncut}
+              onRemove={camera.removeTake}
+              onMove={camera.moveTake}
+              onClearAll={camera.clearTakes}
+            />
           )}
 
           {/* Front row: the three things you touch while filming. */}
@@ -566,5 +546,159 @@ function Dial({
         {step < 1 ? value.toFixed(step < 0.01 ? 3 : 2) : value}
       </span>
     </label>
+  );
+}
+
+/** mm:ss from a count of seconds. */
+function clock(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+/**
+ * The pieces filmed so far.
+ *
+ * Tap one to watch it back. That is the whole point: deciding whether a
+ * take was any good needs you to see it, and the alternative was saving
+ * every attempt to the camera roll and sorting them out in Photos.
+ *
+ * Up and down rather than dragging. Dragging is nicer with a mouse and
+ * miserable with a thumb, and this is used on a phone.
+ */
+function TakeList({
+  takes,
+  canShare,
+  onSave,
+  onSaveUncut,
+  onRemove,
+  onMove,
+  onClearAll,
+}: {
+  takes: Take[];
+  canShare: boolean;
+  onSave: (id: number) => void;
+  onSaveUncut: (id: number) => Promise<void>;
+  onRemove: (id: number) => void;
+  onMove: (id: number, direction: -1 | 1) => void;
+  onClearAll: () => void;
+}) {
+  const [open, setOpen] = useState<number | null>(null);
+  const [confirming, setConfirming] = useState<number | null>(null);
+  const total = takes.reduce((n, t) => n + t.seconds, 0);
+
+  return (
+    <div className="space-y-1 rounded-lg border border-accent/40 bg-accent/5 p-2">
+      <div className="flex items-center gap-2">
+        <p className="text-xs font-medium text-accent">
+          {takes.length} piece{takes.length === 1 ? "" : "s"}, {clock(total)} in all
+        </p>
+        <button
+          type="button"
+          onClick={onClearAll}
+          className="ml-auto text-[11px] text-faint underline underline-offset-2 hover:text-warn"
+        >
+          Clear all
+        </button>
+      </div>
+
+      {takes.map((t, i) => (
+        <div key={t.id} className="rounded-lg border border-border bg-panel p-2">
+          <div className="flex items-center gap-2">
+            <span className="w-5 shrink-0 text-center text-xs text-faint">{i + 1}</span>
+            <button
+              type="button"
+              onClick={() => setOpen(open === t.id ? null : t.id)}
+              className="min-w-0 flex-1 text-left text-xs text-text"
+            >
+              {clock(t.seconds)}
+              <span className="ml-2 text-faint">
+                {t.mb} MB{t.uncut ? ", cut" : ""}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onMove(t.id, -1)}
+              disabled={i === 0}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted disabled:opacity-25"
+              aria-label="Move earlier"
+            >
+              <ArrowUp size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onMove(t.id, 1)}
+              disabled={i === takes.length - 1}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted disabled:opacity-25"
+              aria-label="Move later"
+            >
+              <ArrowDown size={14} />
+            </button>
+          </div>
+
+          {open === t.id && (
+            <div className="mt-2 space-y-2">
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <video
+                src={t.url}
+                controls
+                playsInline
+                className="max-h-64 w-full rounded-lg bg-black"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onSave(t.id)}
+                  className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-accent px-3 text-sm font-medium text-accent"
+                >
+                  {canShare ? <Smartphone size={15} /> : <Download size={15} />}
+                  {canShare ? "Save to my photos" : "Save"}
+                </button>
+                {t.uncut && (
+                  <button
+                    type="button"
+                    onClick={() => onSaveUncut(t.id)}
+                    className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted"
+                    title="The same piece with nothing cut out"
+                  >
+                    Uncut
+                  </button>
+                )}
+                {confirming === t.id ? (
+                  <span className="ml-auto flex items-center gap-2 text-[11px]">
+                    <span className="text-warn">Gone for good.</span>
+                    <button
+                      type="button"
+                      onClick={() => onRemove(t.id)}
+                      className="rounded-full border border-warn px-2 py-0.5 text-warn"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirming(null)}
+                      className="rounded-full border border-border px-2 py-0.5 text-muted"
+                    >
+                      Keep
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirming(t.id)}
+                    className="ml-auto text-xs text-faint underline underline-offset-2 hover:text-warn"
+                  >
+                    Delete this piece
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+
+      <p className="text-[11px] text-faint">
+        Save each piece you want to keep. They are held in this page only,
+        so leaving or reloading loses anything unsaved.
+      </p>
+    </div>
   );
 }

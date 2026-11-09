@@ -63,9 +63,17 @@ const SILENCE_HOLD_MS = 700;
 const METER_MS = 50;
 
 export interface Take {
+  /** Stable across reorders and deletions, unlike an array index. */
+  id: number;
   file: File;
   /** Megabytes, rounded, for telling him the take is really there. */
   mb: number;
+  /** How long it runs, in seconds, measured while recording. */
+  seconds: number;
+  /** A playable URL. Revoked when the take is thrown away. */
+  url: string;
+  /** The same take with nothing cut out, where cutting was on. */
+  uncut?: File;
 }
 
 export interface Recorder {
@@ -102,22 +110,25 @@ export interface Recorder {
    * iOS only opens a share sheet inside a tap, and a recording finishes
    * on its own, so the file waits here for him to press something.
    */
-  take: Take | null;
   /**
-   * The same take with nothing cut out.
+   * Every piece filmed in this sitting, in the order they will go out.
    *
-   * Kept because automatic cutting is destructive and silent: if the
-   * threshold is wrong for the room, words go missing and there is
-   * nothing to compare against. A second recorder on the same stream
-   * costs memory and removes the only real objection to the feature.
+   * A list rather than one take because that is how filming actually
+   * goes: three attempts at the opening, one good middle, a closing line
+   * recorded after a cup of tea. Keeping them all means a fluffed line
+   * costs one piece rather than the whole reel.
+   *
+   * Held in memory only. Leaving the page loses them, which is why each
+   * one can be saved on its own the moment it exists.
    */
-  fullTake: Take | null;
+  takes: Take[];
   canShareTake: boolean;
-  shareTake: () => Promise<void>;
-  downloadTake: () => void;
-  shareFullTake: () => Promise<void>;
-  downloadFullTake: () => void;
-  clearTake: () => void;
+  shareTake: (id: number) => Promise<void>;
+  downloadTake: (id: number) => void;
+  shareUncut: (id: number) => Promise<void>;
+  removeTake: (id: number) => void;
+  moveTake: (id: number, direction: -1 | 1) => void;
+  clearTakes: () => void;
 }
 
 /** Hands a file to the downloads folder. */
@@ -138,8 +149,14 @@ export function useRecorder(filenameHint: string): Recorder {
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [take, setTake] = useState<Take | null>(null);
-  const [fullTake, setFullTake] = useState<Take | null>(null);
+  const [takes, setTakes] = useState<Take[]>([]);
+  const takeIdRef = useRef(1);
+  // Read inside onstop, which closes over the moment the recorder was
+  // made, so the running duration has to come through a ref.
+  const elapsedRef = useRef(0);
+  // The uncut copy of the piece currently recording, handed to the cut
+  // one when both have finished.
+  const pendingUncutRef = useRef<File | null>(null);
   const [level, setLevel] = useState(0);
   const [autoCut, setAutoCut] = useState(false);
   const [threshold, setThreshold] = useState(0.015);
@@ -378,14 +395,22 @@ export function useRecorder(filenameHint: string): Recorder {
         return;
       }
 
-      const file = new File([blob], `${nameRef.current}.${extensionFor(mimeType)}`, {
-        type,
-      });
-      setTake({ file, mb: Math.max(1, Math.round(blob.size / 1_048_576)) });
-
-      // Where there is no share sheet, the downloads folder is the only
-      // place a video can go, so it goes there straight away as before.
-      if (!canShareRef.current) downloadFile(file);
+      const id = takeIdRef.current++;
+      const file = new File(
+        [blob],
+        `${nameRef.current}-${String(id).padStart(2, "0")}.${extensionFor(mimeType)}`,
+        { type },
+      );
+      const piece: Take = {
+        id,
+        file,
+        mb: Math.max(1, Math.round(blob.size / 1_048_576)),
+        seconds: elapsedRef.current,
+        url: URL.createObjectURL(blob),
+        uncut: pendingUncutRef.current ?? undefined,
+      };
+      pendingUncutRef.current = null;
+      setTakes((prev) => [...prev, piece]);
     };
 
     // The uncut copy, on the same stream, started alongside. Only when
@@ -403,10 +428,11 @@ export function useRecorder(filenameHint: string): Recorder {
           const blob = new Blob(fullChunksRef.current, { type });
           fullChunksRef.current = [];
           if (blob.size === 0) return;
-          const file = new File([blob], `${nameRef.current}-uncut.${extensionFor(mimeType)}`, {
-            type,
-          });
-          setFullTake({ file, mb: Math.max(1, Math.round(blob.size / 1_048_576)) });
+          pendingUncutRef.current = new File(
+            [blob],
+            `${nameRef.current}-uncut.${extensionFor(mimeType)}`,
+            { type },
+          );
         };
         full.start(1000);
         fullRecorderRef.current = full;
@@ -421,8 +447,8 @@ export function useRecorder(filenameHint: string): Recorder {
     // so a crash or a closed tab does not lose the entire take.
     recorder.start(1000);
     recorderRef.current = recorder;
-    setTake(null);
-    setFullTake(null);
+    elapsedRef.current = 0;
+    pendingUncutRef.current = null;
     quietSinceRef.current = null;
     setCutting(false);
     setPaused(false);
@@ -483,39 +509,81 @@ export function useRecorder(filenameHint: string): Recorder {
     };
   }, []);
 
-  const shareTake = useCallback(async () => {
-    if (!take) return;
-    try {
-      await navigator.share({ files: [take.file], title: "Take" });
-    } catch (err) {
-      // Closing the sheet is a thing people do on purpose.
-      if ((err as Error)?.name !== "AbortError") {
-        setError("That share was refused. Saving it to your downloads instead.");
-        downloadFile(take.file);
+  const byId = useCallback(
+    (id: number) => takes.find((t) => t.id === id) ?? null,
+    [takes],
+  );
+
+  const shareTake = useCallback(
+    async (id: number) => {
+      const t = byId(id);
+      if (!t) return;
+      try {
+        await navigator.share({ files: [t.file], title: "Take" });
+      } catch (err) {
+        // Closing the sheet is a thing people do on purpose.
+        if ((err as Error)?.name !== "AbortError") {
+          setError("That share was refused. Saving it to your downloads instead.");
+          downloadFile(t.file);
+        }
       }
-    }
-  }, [take]);
+    },
+    [byId],
+  );
 
-  const downloadTake = useCallback(() => {
-    if (take) downloadFile(take.file);
-  }, [take]);
+  const downloadTake = useCallback(
+    (id: number) => {
+      const t = byId(id);
+      if (t) downloadFile(t.file);
+    },
+    [byId],
+  );
 
-  const shareFullTake = useCallback(async () => {
-    if (!fullTake) return;
-    try {
-      await navigator.share({ files: [fullTake.file], title: "Uncut take" });
-    } catch (err) {
-      if ((err as Error)?.name !== "AbortError") downloadFile(fullTake.file);
-    }
-  }, [fullTake]);
+  const shareUncut = useCallback(
+    async (id: number) => {
+      const t = byId(id);
+      if (!t?.uncut) return;
+      try {
+        await navigator.share({ files: [t.uncut], title: "Uncut take" });
+      } catch (err) {
+        if ((err as Error)?.name !== "AbortError") downloadFile(t.uncut);
+      }
+    },
+    [byId],
+  );
 
-  const downloadFullTake = useCallback(() => {
-    if (fullTake) downloadFile(fullTake.file);
-  }, [fullTake]);
+  /**
+   * Throws a piece away, and the memory with it.
+   *
+   * Each piece holds an object URL so it can be played back. Dropping
+   * the row without revoking it leaks the whole video for as long as the
+   * page is open, which on a phone is how a filming session ends in a
+   * crash after the sixth take.
+   */
+  const removeTake = useCallback((id: number) => {
+    setTakes((prev) => {
+      const gone = prev.find((t) => t.id === id);
+      if (gone) URL.revokeObjectURL(gone.url);
+      return prev.filter((t) => t.id !== id);
+    });
+  }, []);
 
-  const clearTake = useCallback(() => {
-    setTake(null);
-    setFullTake(null);
+  const moveTake = useCallback((id: number, direction: -1 | 1) => {
+    setTakes((prev) => {
+      const i = prev.findIndex((t) => t.id === id);
+      const j = i + direction;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }, []);
+
+  const clearTakes = useCallback(() => {
+    setTakes((prev) => {
+      prev.forEach((t) => URL.revokeObjectURL(t.url));
+      return [];
+    });
   }, []);
 
   return {
@@ -538,13 +606,13 @@ export function useRecorder(filenameHint: string): Recorder {
     paused,
     pauseRecording,
     resumeRecording,
-    take,
-    fullTake,
+    takes,
     canShareTake,
     shareTake,
     downloadTake,
-    shareFullTake,
-    downloadFullTake,
-    clearTake,
+    shareUncut,
+    removeTake,
+    moveTake,
+    clearTakes,
   };
 }
