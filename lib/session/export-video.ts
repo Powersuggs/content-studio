@@ -133,29 +133,63 @@ export async function canExport(): Promise<{ ok: boolean; reason: string | null 
   }
 }
 
+/** One filmed piece, and which stretches of it to keep. */
+export interface Part {
+  source: Blob;
+  /** Stretches to KEEP, in order, as built by keepRanges. */
+  ranges: Span[];
+}
+
 /**
  * Play the take, skipping the cuts, and record what comes out.
  *
  * `ranges` is what to KEEP, in order, as built by keepRanges.
  */
-export async function exportCut(
+export function exportCut(
   source: Blob,
   ranges: Span[],
-  options: {
-    onProgress?: (p: ExportProgress) => void;
-    signal?: AbortSignal;
-  } = {},
+  options: ExportOptions = {},
 ): Promise<ExportResult> {
-  if (ranges.length === 0) {
-    throw new Error("There is nothing left after those cuts.");
+  return exportSequence([{ source, ranges }], options);
+}
+
+export interface ExportOptions {
+  onProgress?: (p: ExportProgress) => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * Play several pieces, in order, skipping the cuts, into one video.
+ *
+ * The same machinery as cutting one piece, which is the point: he films
+ * in pieces, so he ends up with separate files and has to leave the app
+ * to put them together. Moving from the end of one piece to the start of
+ * the next is the same move as jumping over a silence, so joining costs
+ * almost nothing once the cutting works.
+ *
+ * Pieces may be different shapes. The canvas is sized from the first one
+ * and the rest are fitted inside it rather than stretched, because a
+ * piece filmed in landscape squeezed into a tall frame looks broken in a
+ * way that is hard to undo after the fact.
+ */
+export async function exportSequence(
+  parts: Part[],
+  options: ExportOptions = {},
+): Promise<ExportResult> {
+  // Flatten to a straight list of stretches to play, each remembering
+  // which piece it came from, so the loop below has one kind of step.
+  const steps = parts.flatMap((part, piece) =>
+    part.ranges.map((r) => ({ piece, start: r.start, end: r.end })),
+  );
+  if (steps.length === 0) {
+    throw new Error("There is nothing left to make a video from.");
   }
   const type = pickExportType();
   if (!type) throw new Error("This browser cannot write a video file.");
 
-  const total = ranges.reduce((n, r) => n + (r.end - r.start), 0);
-  const url = URL.createObjectURL(source);
+  const total = steps.reduce((n, s) => n + (s.end - s.start), 0);
+  const urls = parts.map((p) => URL.createObjectURL(p.source));
   const video = document.createElement("video");
-  video.src = url;
   video.muted = false;
   video.playsInline = true;
   // Keeps the frames coming when the phone is not showing this element.
@@ -168,12 +202,19 @@ export async function exportCut(
   const cleanup = () => {
     cancelAnimationFrame(raf);
     video.pause();
-    URL.revokeObjectURL(url);
+    urls.forEach((u) => URL.revokeObjectURL(u));
     context?.close().catch(() => undefined);
   };
 
   try {
-    await once(video, "loadedmetadata");
+    let loaded = -1;
+    const load = async (piece: number) => {
+      if (loaded === piece) return;
+      video.src = urls[piece];
+      await once(video, "loadedmetadata");
+      loaded = piece;
+    };
+    await load(steps[0].piece);
 
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth || 1080;
@@ -189,6 +230,8 @@ export async function exportCut(
     // allowed here, and without it the finished video has no sound.
     if (context.state === "suspended") await context.resume().catch(() => undefined);
 
+    // Bound to the element, not to the file, so it survives swapping the
+    // source from one piece to the next.
     const tap = context.createMediaElementSource(video);
     const sink = context.createMediaStreamDestination();
     tap.connect(sink);
@@ -208,41 +251,52 @@ export async function exportCut(
     let index = 0;
     let produced = 0; // seconds of finished video written so far
 
-    video.currentTime = ranges[0].start;
+    video.currentTime = steps[0].start;
     await once(video, "seeked");
     recorder.start();
     await video.play();
 
     const draw = () => {
-      paint.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Fitted, not stretched, and on a black ground so a piece of a
+      // different shape sits in bars rather than smearing the last frame
+      // of the one before it down the sides.
+      const scale = Math.min(
+        canvas.width / (video.videoWidth || canvas.width),
+        canvas.height / (video.videoHeight || canvas.height),
+      );
+      const w = (video.videoWidth || canvas.width) * scale;
+      const h = (video.videoHeight || canvas.height) * scale;
+      paint.fillStyle = "#000";
+      paint.fillRect(0, 0, canvas.width, canvas.height);
+      paint.drawImage(video, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
       raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
 
     await new Promise<void>((resolve, reject) => {
-      const abort = () => {
-        reject(new Error("Stopped."));
-      };
+      const abort = () => reject(new Error("Stopped."));
       options.signal?.addEventListener("abort", abort, { once: true });
 
       const tick = async () => {
         if (options.signal?.aborted) return;
-        const range = ranges[index];
-        if (!range) return resolve();
+        const step = steps[index];
+        if (!step) return resolve();
 
-        if (video.currentTime >= range.end - 0.01 || video.ended) {
-          produced += Math.max(0, Math.min(video.currentTime, range.end) - range.start);
+        if (video.currentTime >= step.end - 0.01 || video.ended) {
+          produced += Math.max(0, Math.min(video.currentTime, step.end) - step.start);
           index += 1;
-          const next = ranges[index];
+          const next = steps[index];
           if (!next) {
             resolve();
             return;
           }
-          // Pause the recorder across the jump so the skipped part is
-          // never written, then carry on. The same trick the live silence
-          // cutting uses, which is why the joins need no encoder.
+          // Pause the recorder across the move so neither the skipped
+          // stretch nor the gap between two pieces is ever written. The
+          // same trick the live silence cutting uses, which is why the
+          // joins need no encoder.
           recorder?.pause();
           video.pause();
+          await load(next.piece);
           video.currentTime = next.start;
           await once(video, "seeked").catch(() => undefined);
           await video.play().catch(() => undefined);
@@ -250,7 +304,9 @@ export async function exportCut(
         }
 
         options.onProgress?.({
-          done: total > 0 ? Math.min(1, (produced + Math.max(0, video.currentTime - (ranges[index]?.start ?? 0))) / total) : 0,
+          done: total > 0
+            ? Math.min(1, (produced + Math.max(0, video.currentTime - (steps[index]?.start ?? 0))) / total)
+            : 0,
           seconds: produced,
         });
         setTimeout(tick, 60);
@@ -265,7 +321,7 @@ export async function exportCut(
     const blob = new Blob(chunks, { type });
     if (blob.size === 0) {
       throw new Error(
-        "The edited video came out empty. Nothing was saved, so your original piece is untouched.",
+        "The video came out empty. Nothing was saved, so your original pieces are untouched.",
       );
     }
     return { blob, type, seconds: total };

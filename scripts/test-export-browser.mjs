@@ -31,7 +31,7 @@ import { createRequire } from "node:module";
 
 
 const PAGE = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><script type="module">
-import { exportCut, canExport, pickExportType } from './export-video.js';
+import { exportCut, exportSequence, canExport, pickExportType } from './export-video.js';
 import { keepRanges } from './recut.js';
 window.T = { exportCut, canExport, pickExportType, keepRanges };
 
@@ -89,6 +89,71 @@ function durationOf(blob) {
     v.src = URL.createObjectURL(blob);
   });
 }
+
+// A short solid-colour piece, with sound throughout, at a given size.
+// Two different sizes on purpose: joining pieces filmed in different
+// shapes must letterbox them, not stretch them.
+async function makePiece(seconds, colour, w, h) {
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const g = canvas.getContext('2d');
+  const ctx = new AudioContext();
+  const osc = ctx.createOscillator(), gain = ctx.createGain();
+  const sink = ctx.createMediaStreamDestination();
+  osc.connect(gain); gain.connect(sink); gain.gain.value = 0.3; osc.start();
+  const stream = new MediaStream([
+    ...canvas.captureStream(30).getVideoTracks(),
+    ...sink.stream.getAudioTracks(),
+  ]);
+  const type = ['video/webm;codecs=vp8,opus','video/webm']
+    .find(t => MediaRecorder.isTypeSupported(t));
+  const rec = new MediaRecorder(stream, { mimeType: type });
+  const chunks = [];
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  const start = performance.now();
+  rec.start();
+  await new Promise(done => {
+    const draw = () => {
+      const t = (performance.now() - start) / 1000;
+      g.fillStyle = colour; g.fillRect(0, 0, w, h);
+      if (t >= seconds) { rec.stop(); done(); } else requestAnimationFrame(draw);
+    };
+    requestAnimationFrame(draw);
+  });
+  await new Promise(r => rec.onstop = r);
+  ctx.close();
+  return new Blob(chunks, { type });
+}
+
+window.runJoin = async function () {
+  const a = await makePiece(4, '#00aa00', 240, 320);   // green, tall
+  const b = await makePiece(3, '#0000cc', 320, 240);   // blue, wide
+  const res = await exportSequence([
+    { source: a, ranges: [{ start: 0, end: 4 }] },
+    { source: b, ranges: [{ start: 0, end: 3 }] },
+  ]);
+  const measured = await durationOf(res.blob);
+  const v = document.createElement('video');
+  v.src = URL.createObjectURL(res.blob); v.muted = true;
+  await new Promise(ok => v.onloadeddata = ok);
+  const c = document.createElement('canvas');
+  c.width = 240; c.height = 320;
+  const g = c.getContext('2d');
+  const at = async (t) => {
+    v.currentTime = t;
+    await new Promise(ok => v.onseeked = ok);
+    g.drawImage(v, 0, 0, 240, 320);
+    // Sample the middle, where a letterboxed piece still has picture.
+    const d = g.getImageData(120, 160, 1, 1).data;
+    return d[2] > d[1] ? 'blue' : (d[1] > 60 ? 'green' : 'black');
+  };
+  return {
+    measured,
+    bytes: res.blob.size,
+    early: await at(1),
+    late: await at(Math.max(0, measured - 1)),
+  };
+};
 
 window.run = async function (cuts) {
   const src = window.src || (window.src = await makeSource());
@@ -224,6 +289,24 @@ try {
     control.grey > 0,
     "the detector never sees grey, so the test above proves nothing",
   );
+  const joined = await page.evaluate(() => runJoin());
+  console.log("\n  Joining a 4 second piece and a 3 second piece into one");
+  check(
+    "the joined video is about 7 seconds",
+    Math.abs(joined.measured - 7) < 0.5,
+    `came out ${joined.measured.toFixed(2)}s`,
+  );
+  check(
+    "it starts with the first piece",
+    joined.early === "green",
+    `the frame one second in reads ${joined.early}`,
+  );
+  check(
+    "...and ends with the second one, so the join really happened",
+    joined.late === "blue",
+    `the frame near the end reads ${joined.late}; the second piece never arrived`,
+  );
+  check("the joined file is not empty", joined.bytes > 1000, `${joined.bytes} bytes`);
 } finally {
   await browser.close();
   server.close();

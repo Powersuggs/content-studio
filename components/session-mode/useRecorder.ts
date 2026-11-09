@@ -95,6 +95,13 @@ export interface Take {
    * find that out at the upload screen.
    */
   format: TakeFormat;
+  /**
+   * Set on pieces the app made rather than filmed, such as "cut" or
+   * "joined from 2". Without it an edited copy and the take it came from
+   * sit in the list looking identical, which is how you save the wrong
+   * one and post it.
+   */
+  note?: string;
 }
 
 export interface Recorder {
@@ -149,7 +156,7 @@ export interface Recorder {
    */
   takes: Take[];
   /** Keep a file made elsewhere, such as an edited copy, as a piece. */
-  addTake: (file: File, seconds: number) => void;
+  addTake: (file: File, seconds: number, note?: string) => void;
   canShareTake: boolean;
   /**
    * What the last save actually did, in words.
@@ -680,7 +687,7 @@ export function useRecorder(filenameHint: string): Recorder {
    * way door, and finding out the edit went wrong after the only copy has
    * been overwritten is not a position to put anyone in.
    */
-  const addTake = useCallback((file: File, seconds: number) => {
+  const addTake = useCallback((file: File, seconds: number, note?: string) => {
     const id = takeIdRef.current++;
     setTakes((prev) => [
       ...prev,
@@ -691,6 +698,7 @@ export function useRecorder(filenameHint: string): Recorder {
         seconds,
         url: URL.createObjectURL(file),
         format: formatOf(file.type),
+        note,
       },
     ]);
   }, []);
