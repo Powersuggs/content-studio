@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { fitFrame, showsReelGuide } from "@/lib/session/framing";
 import {
   ChevronLeft,
   ChevronRight,
@@ -17,6 +18,7 @@ import {
   Download,
   SlidersHorizontal,
   Film,
+  ArrowLeft,
 } from "lucide-react";
 import { markFilmedAction, unfilmScriptAction } from "@/app/session-mode/actions";
 import { useRecorder, type Take } from "./useRecorder";
@@ -85,6 +87,29 @@ export default function Teleprompter({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
+  const cameraAreaRef = useRef<HTMLDivElement>(null);
+  const [areaSize, setAreaSize] = useState({ width: 0, height: 0 });
+
+  /*
+   * Watch the space the camera gets, so the preview can be drawn at the
+   * camera's true shape inside it.
+   *
+   * Done in JavaScript rather than CSS because "fit a box of a known shape
+   * inside a box of an unknown shape" has no reliable pure-CSS form, and
+   * getting it slightly wrong here means cropping the preview again, which
+   * is the exact bug this is fixing.
+   */
+  useEffect(() => {
+    const el = cameraAreaRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () =>
+      setAreaSize({ width: el.clientWidth, height: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Accumulated scroll position as a float. We assign this whole value
   // to scrollTop every frame rather than doing `scrollTop += delta`:
   // scrollTop is stored as an integer by the browser, so incrementing it
@@ -133,6 +158,20 @@ export default function Teleprompter({
     .slice(0, 40) || "take";
   const stamp = new Date().toISOString().slice(0, 10);
   const camera = useRecorder(`content-studio-${slug}-${stamp}`);
+
+  /**
+   * The preview rectangle: the biggest box of the camera's shape that fits
+   * in the space available. Letterboxed rather than cropped, so the edges
+   * of the picture he is framing himself against are the edges of the
+   * picture being recorded. Arithmetic in lib/session/framing.ts, where
+   * scripts/test-framing.mjs can check it.
+   */
+  const frame = useMemo(() => {
+    const fitted = fitFrame(areaSize.width, areaSize.height, camera.aspect);
+    return fitted.width
+      ? { width: fitted.width, height: fitted.height }
+      : { width: "100%", height: "100%" };
+  }, [areaSize, camera.aspect]);
 
   // Back to the top when switching scripts, whichever way it is shown.
   useEffect(() => {
@@ -247,7 +286,7 @@ export default function Teleprompter({
 
   if (!current) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-2 bg-bg p-8 text-center">
+      <div className="flex h-app flex-col items-center justify-center gap-2 bg-bg p-8 text-center">
         <p className="text-lg text-text">Nothing queued.</p>
         {filmed.length > 0 && (
           <div className="w-full max-w-md space-y-2 rounded-xl border border-border bg-panel p-3 text-left">
@@ -279,7 +318,7 @@ export default function Teleprompter({
   const cameraOn = camera.state === "on";
 
   return (
-    <div ref={shellRef} className="relative flex h-screen flex-col bg-bg">
+    <div ref={shellRef} className="relative flex h-app flex-col overflow-hidden bg-bg">
       {reviewing && (
         <ReviewPanel
           takes={camera.takes}
@@ -292,24 +331,61 @@ export default function Teleprompter({
           onClose={() => setReviewing(false)}
         />
       )}
-      <div className="relative min-h-0 flex-1">
+      <div ref={cameraAreaRef} className="relative min-h-0 flex-1">
         {/* The camera, underneath everything. Mirrored for the person
-            reading; the recording itself is not flipped. */}
-        <video
-          ref={camera.videoRef}
-          playsInline
-          muted
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
-            cameraOn ? "opacity-100" : "opacity-0"
-          }`}
-          style={{ transform: "scaleX(-1)" }}
-        />
+            reading; the recording itself is not flipped.
+
+            Held at the camera's own shape rather than stretched to fill
+            this box. The box is taller than any camera frame, so filling
+            it meant cropping the sides off the preview, so he was framing
+            himself against a picture 22% narrower than the one being
+            recorded. Whatever is left over goes black, and the words sit
+            over that quite happily. */}
+        <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+          <div
+            className="relative"
+            style={{ width: frame.width, height: frame.height }}
+          >
+            <video
+              ref={camera.videoRef}
+              playsInline
+              muted
+              className={`h-full w-full object-cover transition-opacity duration-300 ${
+                cameraOn ? "opacity-100" : "opacity-0"
+              }`}
+              style={{ transform: "scaleX(-1)" }}
+            />
+            {/* What a reel keeps. Instagram wants 9:16 and the camera gives
+                something wider, so the difference gets cut somewhere. Better
+                he sees where, now, than finds out after posting. */}
+            {cameraOn && showsReelGuide(camera.aspect) && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="aspect-[9/16] h-full border-x border-dashed border-white/35" />
+              </div>
+            )}
+          </div>
+        </div>
         {/* Dimmer, so the words stay readable over whatever is behind them. */}
         {cameraOn && (
           <div
             className="absolute inset-0 bg-black transition-opacity"
             style={{ opacity: scrim }}
           />
+        )}
+
+        {/* The way out. This screen has no nav bar of its own any more:
+            a hamburger menu is no use while filming, and on a phone it was
+            stacked on top of a full-height screen and pushed the record
+            button off the bottom. Hidden while rolling, because the only
+            thing worse than no way out is losing a take to a stray thumb. */}
+        {!camera.recording && (
+          <a
+            href="/dashboard"
+            aria-label="Leave Session Mode"
+            className="absolute left-3 top-3 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white/80"
+          >
+            <ArrowLeft size={18} />
+          </a>
         )}
 
         {standalone && (
