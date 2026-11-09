@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { markFilmedAction } from "@/app/session-mode/actions";
 import { useRecorder, type Take } from "./useRecorder";
+import { chunkScript, holdMs } from "@/lib/session/chunks";
 
 export interface QueuedScriptItem {
   id: number;
@@ -46,6 +47,19 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
   const [scrim, setScrim] = useState(0.45);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  /**
+   * How the script is shown.
+   *
+   * "scroll" is a moving wall of text, which works when you can keep
+   * your eyes on it. Filming, you cannot: you are on the lens, glancing
+   * down, finding your place again. "lines" holds a couple of lines
+   * still until you have said them, which is what every prompter built
+   * for a phone does.
+   */
+  const [mode, setMode] = useState<"scroll" | "lines">("scroll");
+  const [chunk, setChunk] = useState(0);
+  /** Words a minute, the pace in lines mode. Speed means something else there. */
+  const [wpm, setWpm] = useState(130);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -65,6 +79,8 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
       if (typeof saved?.speed === "number") setSpeed(saved.speed);
       if (typeof saved?.textSize === "number") setTextSize(saved.textSize);
       if (typeof saved?.scrim === "number") setScrim(saved.scrim);
+      if (saved?.mode === "lines" || saved?.mode === "scroll") setMode(saved.mode);
+      if (typeof saved?.wpm === "number") setWpm(saved.wpm);
     } catch {
       // Private browsing, a cleared store, or nonsense in the slot. The
       // defaults are fine; losing a setting is not worth a broken page.
@@ -73,13 +89,20 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
 
   useEffect(() => {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ speed, textSize, scrim }));
+      localStorage.setItem(
+        SETTINGS_KEY,
+        JSON.stringify({ speed, textSize, scrim, mode, wpm }),
+      );
     } catch {
       /* storage full or refused; the prompter still works */
     }
-  }, [speed, textSize, scrim]);
+  }, [speed, textSize, scrim, mode, wpm]);
 
   const current = remaining[index] as QueuedScriptItem | undefined;
+  const chunks = useMemo(
+    () => chunkScript(current?.hook ?? "", current?.body ?? ""),
+    [current?.hook, current?.body],
+  );
 
   const slug = (current?.hook || "take")
     .toLowerCase()
@@ -89,12 +112,31 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
   const stamp = new Date().toISOString().slice(0, 10);
   const camera = useRecorder(`content-studio-${slug}-${stamp}`);
 
-  // Reset scroll position when switching scripts.
+  // Back to the top when switching scripts, whichever way it is shown.
   useEffect(() => {
     scrollPosRef.current = 0;
     if (containerRef.current) containerRef.current.scrollTop = 0;
     lastTimeRef.current = null;
+    setChunk(0);
   }, [index]);
+
+  /**
+   * Advancing the lines on their own while playing.
+   *
+   * Each line is held for as long as it takes to say, which is a count
+   * of its words rather than its characters: six short words is not half
+   * the work of six long ones. It stops at the last line rather than
+   * looping, because looping during a take is how you lose your place.
+   */
+  useEffect(() => {
+    if (mode !== "lines" || !playing) return;
+    if (chunk >= chunks.length - 1) {
+      setPlaying(false);
+      return;
+    }
+    const t = setTimeout(() => setChunk((c) => c + 1), holdMs(chunks[chunk] ?? "", wpm));
+    return () => clearTimeout(t);
+  }, [mode, playing, chunk, chunks, wpm]);
 
   useEffect(() => {
     if (!playing) {
@@ -248,34 +290,83 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
         {/* Prompter text -- NO smooth-scroll behavior on this container.
             Smooth-scroll behavior turns every frame's scrollTop assignment
             into its own competing CSS animation, fighting the rAF loop. */}
-        <div
-          ref={containerRef}
-          className="absolute inset-0 overflow-y-auto px-6 py-16 sm:px-16"
-        >
-          <div className="mx-auto max-w-3xl">
+        {mode === "lines" ? (
+          /* A couple of lines, held still, with the next one dimmed
+             underneath so there is no surprise about what is coming.
+             The whole area is the button: mid-take, a thumb anywhere on
+             the screen should move it on, not a target you have to find. */
+          <button
+            type="button"
+            onClick={() => setChunk((c) => Math.min(c + 1, chunks.length - 1))}
+            className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center sm:px-16"
+          >
             <p
               className={`font-semibold ${cameraOn ? "text-white" : "text-text"}`}
               style={{
                 fontSize: textSize * 1.3,
+                lineHeight: 1.25,
                 textShadow: cameraOn ? "0 2px 12px rgba(0,0,0,0.9)" : undefined,
               }}
             >
-              {current.hook}
+              {chunks[chunk] ?? ""}
             </p>
-            <p
-              className={`mt-8 whitespace-pre-wrap leading-relaxed ${
-                cameraOn ? "text-white" : "text-text"
-              }`}
-              style={{
-                fontSize: textSize,
-                textShadow: cameraOn ? "0 2px 12px rgba(0,0,0,0.9)" : undefined,
-              }}
-            >
-              {current.body}
-            </p>
-            <div style={{ height: "60vh" }} />
+            {chunks[chunk + 1] && (
+              <p
+                className={`mt-8 ${cameraOn ? "text-white/40" : "text-faint"}`}
+                style={{ fontSize: textSize * 0.7, lineHeight: 1.3 }}
+              >
+                {chunks[chunk + 1]}
+              </p>
+            )}
+          </button>
+        ) : (
+          <div
+            ref={containerRef}
+            className="absolute inset-0 overflow-y-auto px-6 py-16 sm:px-16"
+          >
+            <div className="mx-auto max-w-3xl">
+              <p
+                className={`font-semibold ${cameraOn ? "text-white" : "text-text"}`}
+                style={{
+                  fontSize: textSize * 1.3,
+                  textShadow: cameraOn ? "0 2px 12px rgba(0,0,0,0.9)" : undefined,
+                }}
+              >
+                {current.hook}
+              </p>
+              <p
+                className={`mt-8 whitespace-pre-wrap leading-relaxed ${
+                  cameraOn ? "text-white" : "text-text"
+                }`}
+                style={{
+                  fontSize: textSize,
+                  textShadow: cameraOn ? "0 2px 12px rgba(0,0,0,0.9)" : undefined,
+                }}
+              >
+                {current.body}
+              </p>
+              <div style={{ height: "60vh" }} />
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Where you are, bottom left, out of the way of the words. */}
+        {mode === "lines" && chunks.length > 0 && (
+          <div className="pointer-events-none absolute bottom-3 left-4 z-10 flex items-center gap-2">
+            <span className="rounded-full bg-black/50 px-2 py-0.5 font-mono text-xs text-white/70">
+              {chunk + 1} / {chunks.length}
+            </span>
+          </div>
+        )}
+        {mode === "lines" && chunk > 0 && (
+          <button
+            type="button"
+            onClick={() => setChunk((c) => Math.max(0, c - 1))}
+            className="absolute bottom-2 right-3 z-10 rounded-full bg-black/50 px-3 py-2 text-xs text-white/80"
+          >
+            Back a line
+          </button>
+        )}
       </div>
 
       {/* Controls.
@@ -354,6 +445,7 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
                     scrollPosRef.current = 0;
                     if (containerRef.current) containerRef.current.scrollTop = 0;
                     lastTimeRef.current = null;
+                    setChunk(0);
                     camera.startRecording();
                     setPlaying(true);
                   }
@@ -436,7 +528,40 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
 
           {showSettings && (
             <div className="space-y-3 rounded-lg border border-border bg-panel-2 p-3">
-              <Dial label="Speed" value={speed} min={5} max={150} onChange={setSpeed} />
+              <div className="flex items-center gap-2">
+                <span className="w-28 shrink-0 text-xs text-muted">Script shows as</span>
+                <div className="flex flex-1 gap-1">
+                  {(["scroll", "lines"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => {
+                        setMode(m);
+                        setPlaying(false);
+                      }}
+                      className={`h-9 flex-1 rounded-lg border text-xs ${
+                        mode === m
+                          ? "border-accent bg-accent/10 text-accent"
+                          : "border-border text-muted"
+                      }`}
+                    >
+                      {m === "scroll" ? "Scrolling" : "A few lines"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {mode === "lines" ? (
+                <Dial
+                  label="Speaking pace"
+                  value={wpm}
+                  min={60}
+                  max={220}
+                  onChange={setWpm}
+                />
+              ) : (
+                <Dial label="Speed" value={speed} min={5} max={150} onChange={setSpeed} />
+              )}
               <Dial label="Text size" value={textSize} min={18} max={56} onChange={setTextSize} />
               {cameraOn && (
                 <Dial
