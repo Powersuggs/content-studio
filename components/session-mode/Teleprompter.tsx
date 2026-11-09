@@ -16,12 +16,12 @@ import {
   Smartphone,
   Download,
   SlidersHorizontal,
-  ArrowUp,
-  ArrowDown,
+  Film,
 } from "lucide-react";
-import { markFilmedAction } from "@/app/session-mode/actions";
+import { markFilmedAction, unfilmScriptAction } from "@/app/session-mode/actions";
 import { useRecorder, type Take } from "./useRecorder";
 import { chunkScript, holdMs } from "@/lib/session/chunks";
+import ReviewPanel from "./ReviewPanel";
 
 export interface QueuedScriptItem {
   id: number;
@@ -31,7 +31,19 @@ export interface QueuedScriptItem {
 
 const SETTINGS_KEY = "content-studio.prompter";
 
-export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] }) {
+export interface FilmedScript {
+  id: number;
+  hook: string;
+}
+
+export default function Teleprompter({
+  scripts,
+  filmed = [],
+}: {
+  scripts: QueuedScriptItem[];
+  /** Already marked done, so Done can be taken back. */
+  filmed?: FilmedScript[];
+}) {
   const [remaining, setRemaining] = useState(scripts);
   const [index, setIndex] = useState(0);
   // Settings he dials in once and should not have to dial in again.
@@ -57,6 +69,16 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
    * for a phone does.
    */
   const [mode, setMode] = useState<"scroll" | "lines">("scroll");
+  /**
+   * Running from an icon on the home screen rather than in the browser.
+   *
+   * On an iPhone that is a stripped-down context where saving a file can
+   * quietly do nothing, which is exactly what happened to Aaron: he
+   * pressed save, nothing appeared, and the take went nowhere. Worth
+   * saying before he films rather than after.
+   */
+  const [standalone, setStandalone] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const [chunk, setChunk] = useState(0);
   /** Words a minute, the pace in lines mode. Speed means something else there. */
   const [wpm, setWpm] = useState(130);
@@ -185,6 +207,17 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
   }
 
   useEffect(() => {
+    try {
+      const iosStandalone = (window.navigator as unknown as { standalone?: boolean })
+        .standalone === true;
+      const displayMode = window.matchMedia("(display-mode: standalone)").matches;
+      setStandalone(iosStandalone || displayMode);
+    } catch {
+      setStandalone(false);
+    }
+  }, []);
+
+  useEffect(() => {
     const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
@@ -216,6 +249,17 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-2 bg-bg p-8 text-center">
         <p className="text-lg text-text">Nothing queued.</p>
+        {filmed.length > 0 && (
+          <div className="w-full max-w-md space-y-2 rounded-xl border border-border bg-panel p-3 text-left">
+            <p className="text-xs text-muted">
+              These are marked done. Pressing Done hides a script from here, it
+              does not delete it. Put one back if you pressed it by mistake.
+            </p>
+            {filmed.map((f) => (
+              <PutBack key={f.id} script={f} />
+            ))}
+          </div>
+        )}
         <p className="max-w-md text-sm text-faint">
           Two ways to fill this. Write a reel or a short on the{" "}
           <a href="/ideas" className="text-accent hover:underline">
@@ -235,7 +279,19 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
   const cameraOn = camera.state === "on";
 
   return (
-    <div ref={shellRef} className="flex h-screen flex-col bg-bg">
+    <div ref={shellRef} className="relative flex h-screen flex-col bg-bg">
+      {reviewing && (
+        <ReviewPanel
+          takes={camera.takes}
+          canShare={camera.canShareTake}
+          saveNote={camera.saveNote}
+          onSave={camera.saveTake}
+          onSaveUncut={camera.saveUncut}
+          onRemove={camera.removeTake}
+          onMove={camera.moveTake}
+          onClose={() => setReviewing(false)}
+        />
+      )}
       <div className="relative min-h-0 flex-1">
         {/* The camera, underneath everything. Mirrored for the person
             reading; the recording itself is not flipped. */}
@@ -254,6 +310,16 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
             className="absolute inset-0 bg-black transition-opacity"
             style={{ opacity: scrim }}
           />
+        )}
+
+        {standalone && (
+          <div className="absolute inset-x-0 top-0 z-20 p-3">
+            <p className="mx-auto max-w-md rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-center text-xs text-warn">
+              You opened this from a home screen icon. Saving a video often
+              does nothing in that mode. Open the site in your normal browser
+              before you film.
+            </p>
+          </div>
         )}
 
         {camera.state === "error" && camera.error && (
@@ -382,15 +448,19 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
               the opening, one good middle, and a closing line after a cup
               of tea. A fluffed line should cost one piece, not the reel. */}
           {camera.takes.length > 0 && (
-            <TakeList
-              takes={camera.takes}
-              canShare={camera.canShareTake}
-              onSave={camera.canShareTake ? camera.shareTake : camera.downloadTake}
-              onSaveUncut={camera.shareUncut}
-              onRemove={camera.removeTake}
-              onMove={camera.moveTake}
-              onClearAll={camera.clearTakes}
-            />
+            <button
+              type="button"
+              onClick={() => setReviewing(true)}
+              className="flex w-full items-center gap-2 rounded-lg border border-accent/40 bg-accent/5 p-2 text-left"
+            >
+              <Film size={15} className="shrink-0 text-accent" />
+              <span className="text-xs text-accent">
+                {camera.takes.length} piece{camera.takes.length === 1 ? "" : "s"} filmed
+              </span>
+              <span className="ml-auto text-xs font-medium text-accent">
+                Review and save
+              </span>
+            </button>
           )}
 
           {/* Front row: the three things you touch while filming. */}
@@ -437,6 +507,9 @@ export default function Teleprompter({ scripts }: { scripts: QueuedScriptItem[] 
                   if (camera.recording) {
                     camera.stopRecording();
                     setPlaying(false);
+                    // Straight into review, because the question after
+                    // "stop" is always "was that any good".
+                    setReviewing(true);
                   } else {
                     // Rewind to the top so the take starts at the hook, and
                     // start the scroll with it: pressing record and then
@@ -674,156 +747,29 @@ function Dial({
   );
 }
 
-/** mm:ss from a count of seconds. */
-function clock(seconds: number): string {
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
-/**
- * The pieces filmed so far.
- *
- * Tap one to watch it back. That is the whole point: deciding whether a
- * take was any good needs you to see it, and the alternative was saving
- * every attempt to the camera roll and sorting them out in Photos.
- *
- * Up and down rather than dragging. Dragging is nicer with a mouse and
- * miserable with a thumb, and this is used on a phone.
- */
-function TakeList({
-  takes,
-  canShare,
-  onSave,
-  onSaveUncut,
-  onRemove,
-  onMove,
-  onClearAll,
-}: {
-  takes: Take[];
-  canShare: boolean;
-  onSave: (id: number) => void;
-  onSaveUncut: (id: number) => Promise<void>;
-  onRemove: (id: number) => void;
-  onMove: (id: number, direction: -1 | 1) => void;
-  onClearAll: () => void;
-}) {
-  const [open, setOpen] = useState<number | null>(null);
-  const [confirming, setConfirming] = useState<number | null>(null);
-  const total = takes.reduce((n, t) => n + t.seconds, 0);
-
+/** One filmed script, with the way back. */
+function PutBack({ script }: { script: FilmedScript }) {
+  const [pending, setPending] = useState(false);
+  const [done, setDone] = useState(false);
   return (
-    <div className="space-y-1 rounded-lg border border-accent/40 bg-accent/5 p-2">
-      <div className="flex items-center gap-2">
-        <p className="text-xs font-medium text-accent">
-          {takes.length} piece{takes.length === 1 ? "" : "s"}, {clock(total)} in all
-        </p>
+    <div className="flex items-center gap-2 rounded-lg border border-border bg-panel-2 p-2">
+      <span className="min-w-0 flex-1 truncate text-xs text-text">{script.hook}</span>
+      {done ? (
+        <span className="text-[11px] text-accent">Back in the queue</span>
+      ) : (
         <button
           type="button"
-          onClick={onClearAll}
-          className="ml-auto text-[11px] text-faint underline underline-offset-2 hover:text-warn"
+          disabled={pending}
+          onClick={async () => {
+            setPending(true);
+            await unfilmScriptAction(script.id);
+            setDone(true);
+          }}
+          className="h-9 shrink-0 rounded-lg border border-accent/40 px-3 text-xs text-accent disabled:opacity-50"
         >
-          Clear all
+          Put it back
         </button>
-      </div>
-
-      {takes.map((t, i) => (
-        <div key={t.id} className="rounded-lg border border-border bg-panel p-2">
-          <div className="flex items-center gap-2">
-            <span className="w-5 shrink-0 text-center text-xs text-faint">{i + 1}</span>
-            <button
-              type="button"
-              onClick={() => setOpen(open === t.id ? null : t.id)}
-              className="min-w-0 flex-1 text-left text-xs text-text"
-            >
-              {clock(t.seconds)}
-              <span className="ml-2 text-faint">
-                {t.mb} MB{t.uncut ? ", cut" : ""}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onMove(t.id, -1)}
-              disabled={i === 0}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted disabled:opacity-25"
-              aria-label="Move earlier"
-            >
-              <ArrowUp size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={() => onMove(t.id, 1)}
-              disabled={i === takes.length - 1}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted disabled:opacity-25"
-              aria-label="Move later"
-            >
-              <ArrowDown size={14} />
-            </button>
-          </div>
-
-          {open === t.id && (
-            <div className="mt-2 space-y-2">
-              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-              <video
-                src={t.url}
-                controls
-                playsInline
-                className="max-h-64 w-full rounded-lg bg-black"
-              />
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => onSave(t.id)}
-                  className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-accent px-3 text-sm font-medium text-accent"
-                >
-                  {canShare ? <Smartphone size={15} /> : <Download size={15} />}
-                  {canShare ? "Save to my photos" : "Save"}
-                </button>
-                {t.uncut && (
-                  <button
-                    type="button"
-                    onClick={() => onSaveUncut(t.id)}
-                    className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted"
-                    title="The same piece with nothing cut out"
-                  >
-                    Uncut
-                  </button>
-                )}
-                {confirming === t.id ? (
-                  <span className="ml-auto flex items-center gap-2 text-[11px]">
-                    <span className="text-warn">Gone for good.</span>
-                    <button
-                      type="button"
-                      onClick={() => onRemove(t.id)}
-                      className="rounded-full border border-warn px-2 py-0.5 text-warn"
-                    >
-                      Delete
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirming(null)}
-                      className="rounded-full border border-border px-2 py-0.5 text-muted"
-                    >
-                      Keep
-                    </button>
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirming(t.id)}
-                    className="ml-auto text-xs text-faint underline underline-offset-2 hover:text-warn"
-                  >
-                    Delete this piece
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      ))}
-
-      <p className="text-[11px] text-faint">
-        Save each piece you want to keep. They are held in this page only,
-        so leaving or reloading loses anything unsaved.
-      </p>
+      )}
     </div>
   );
 }

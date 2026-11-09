@@ -886,6 +886,25 @@ export async function getQueuedScripts(): Promise<ScriptRecord[]> {
   );
 }
 
+/**
+ * Scripts marked filmed, newest first.
+ *
+ * So "Done" stops being a one way door. Marking a script filmed only
+ * hides it from the teleprompter, but with nothing listing them
+ * anywhere that is indistinguishable from deleting it, which is how
+ * Aaron lost sight of two scripts by pressing a button labelled Done.
+ */
+export async function getFilmedScripts(limit = 10): Promise<ScriptRecord[]> {
+  return query<ScriptRecord>(
+    `select id, post_id, title, hook, body, status, created_at
+     from scripts
+     where status = 'filmed' and account_id = $1
+     order by created_at desc
+     limit $2`,
+    [await currentAccountId(), limit],
+  );
+}
+
 // --- Boards: named collections with toggle membership --------------------
 export interface BoardSummary {
   id: number;
