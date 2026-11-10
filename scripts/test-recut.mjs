@@ -15,6 +15,7 @@
  *   node scripts/test-recut.mjs
  */
 import {
+  withBreath,
   findQuietSpans,
   keepRanges,
   keptSeconds,
@@ -165,6 +166,35 @@ console.log("\n  What is left after cutting");
     "a cut too short to matter does not leave a stuttering sliver behind",
     keep.length <= 2 && near(keptSeconds(keep), 9.99, 0.05),
     JSON.stringify(keep),
+  );
+}
+
+console.log("\n  Leaving a breath in each gap");
+{
+  const cuts = [{ start: 3, end: 6 }];
+  const kept = withBreath(cuts, 0.4);
+  check(
+    "a two second gap becomes shorter, not gone",
+    near(kept[0].start, 3.2) && near(kept[0].end, 5.8),
+    JSON.stringify(kept),
+  );
+  check(
+    "...leaving exactly the breath asked for",
+    near((cuts[0].end - cuts[0].start) - (kept[0].end - kept[0].start), 0.4),
+  );
+  check("asking for none changes nothing", withBreath(cuts, 0)[0].end === 6);
+  check(
+    "a gap smaller than the breath is dropped rather than turned inside out",
+    withBreath([{ start: 1, end: 1.2 }], 0.4).length === 0,
+    "a negative cut would remove the wrong part of the video",
+  );
+  check(
+    "the breath is taken off both ends, so the pause stays where it was",
+    (() => {
+      const c = withBreath([{ start: 2, end: 4 }], 0.5)[0];
+      return near((c.start + c.end) / 2, 3);
+    })(),
+    "taking it all off one end would shift the pause rather than shorten it",
   );
 }
 

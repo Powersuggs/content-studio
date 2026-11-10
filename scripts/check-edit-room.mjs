@@ -90,6 +90,23 @@ check(
   "a cut turned inside out stops removing anything, silently",
 );
 
+// "Maybe prompt it like a small break and don't cut the full silence out
+//  so it is more fluent on speaking like breaks"
+check(
+  "some of each found pause is left in, rather than all of it taken",
+  /withBreath/.test(room),
+  "cutting every pause out entirely is what makes an edit sound like a machine",
+);
+check(
+  "...and how much is his to choose",
+  /BREATHS/.test(room) && /Pauses/.test(room),
+);
+check(
+  "a cut he drew himself is left exactly where he put it",
+  /on\.filter\(\(c\) => c\.mine\)/.test(room),
+  "the breath is for gaps that were found, not for the bit he pointed at",
+);
+
 // The bug that made the list come back empty.
 check(
   "the cut list waits for the sound to arrive before deciding there are none",

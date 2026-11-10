@@ -45,7 +45,25 @@ interface CanvasTrack extends MediaStreamTrack {
  * than a phone has spare. 1280 is under half the pixels, and the
  * difference survives Instagram's own re-encoding anyway.
  */
-const MAX_LONG_EDGE = 1280;
+const MAX_LONG_EDGE = 960;
+
+/**
+ * Frames a second to aim for.
+ *
+ * Deliberately below the thirty a phone films at. Aaron's second export
+ * came back averaging under nineteen frames a second with five freezes of
+ * a third of a second each in six seconds of video, and the pictures
+ * either side of four of those five showed no more movement than any
+ * other third of a second, which means they were not the cuts. They were
+ * the encoder falling behind.
+ *
+ * Pushing thirty frames a second at a device that can manage twenty does
+ * not get thirty. It gets twenty with the rest queued up, and the queue
+ * comes out as the picture stopping dead. Asking for twenty four and
+ * letting the extra source frames go by gives an evenly paced video,
+ * which is the one that looks right.
+ */
+const TARGET_FPS = 24;
 
 /** Width over height of a reel: 1080 by 1920. */
 const REEL_SHAPE = 9 / 16;
@@ -378,8 +396,11 @@ export async function exportSequence(
       lastFrameAt = now;
       framesPushed += 1;
     };
+    const minGapMs = 1000 / TARGET_FPS;
     const pump = () => {
-      pushFrame();
+      // Let a source frame go by rather than queue it behind one the
+      // encoder has not finished with.
+      if (Date.now() - lastFrameAt >= minGapMs - 1) pushFrame();
       frameHandle = video.requestVideoFrameCallback(pump);
     };
 

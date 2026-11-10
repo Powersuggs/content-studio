@@ -21,19 +21,22 @@ export const REEL_ASPECT = 9 / 16;
 const EPSILON = 0.001;
 
 /**
- * Whether a camera giving this shape should be asked for a tall frame.
+ * Whether a camera giving this shape should be asked for a reel shape.
  *
- * True for a landscape camera, which is almost always a laptop webcam.
- * There the crop is the entire point: a reel cannot be a letterbox, and
- * cropping is the only way to get a tall frame out of a wide sensor.
+ * True for anything wider than 9:16, which is every camera there is: a
+ * laptop webcam at 16:9 and a phone front camera at 3:4 alike.
  *
- * False for anything already portrait or square, which is every phone
- * front camera. Those are cropped by asking, and cropping a 4:3 sensor to
- * 9:16 is what produced the complaint this module exists to answer.
+ * This used to be true only for landscape cameras, leaving a phone to
+ * film its whole sensor while the finished video kept only the middle.
+ * That showed him a wider picture than he was going to get, and he
+ * framed against it: "my arms are not long enough to hold the phone out
+ * that far away". The crop happens either way, because a reel is 9:16
+ * and no camera is. Doing it at the start means the picture on screen
+ * while he films is the picture he ends up with.
  */
-export function wantsTallerCrop(width: number, height: number): boolean {
+export function needsReelShape(width: number, height: number): boolean {
   if (!width || !height) return false;
-  return width > height;
+  return width / height > REEL_ASPECT + EPSILON;
 }
 
 /**

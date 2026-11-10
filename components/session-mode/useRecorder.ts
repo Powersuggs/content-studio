@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { wantsTallerCrop } from "@/lib/session/framing";
+import { needsReelShape } from "@/lib/session/framing";
 
 /**
  * Camera and recording for Session Mode.
@@ -402,18 +402,30 @@ export function useRecorder(filenameHint: string): Recorder {
       });
       let shot = stream.getVideoTracks()[0]?.getSettings();
 
-      // A laptop webcam is the opposite problem. Its natural frame is wide,
-      // and a wide frame is not a reel, so here the crop is the whole point:
-      // without it he would film a letterbox and find out at posting time.
-      // Only the phone, whose sensor is already tall, gets left alone.
-      //
-      // Reshaped on the track we already hold rather than by opening a
-      // second stream. Asking the same camera for a second stream while the
-      // first is still live is how you get a refusal, or worse a silently
-      // downgraded mode, and on a phone it can mean a second permission
-      // prompt in the middle of setting up to film.
+      /*
+       * Film in the shape it will be posted in.
+       *
+       * This used to reshape only a landscape camera and leave a phone's
+       * taller sensor alone, which meant the preview showed more than the
+       * finished video would keep. Aaron framed himself against the wider
+       * picture and then found the export tighter: "my arms are not long
+       * enough to hold the phone out that far away". They are long enough.
+       * He was being shown the wrong picture.
+       *
+       * A reel is 9:16 and a phone sensor is 4:3, so a quarter of the
+       * width goes whatever happens. The only question is whether he sees
+       * that while filming or finds out afterwards, and the native camera
+       * app answers it the same way: show him the frame he is actually
+       * getting.
+       *
+       * Reshaped on the track we already hold rather than by opening a
+       * second stream. Asking the same camera for a second stream while the
+       * first is still live is how you get a refusal, or worse a silently
+       * downgraded mode, and on a phone it can mean a second permission
+       * prompt in the middle of setting up to film.
+       */
       const track = stream.getVideoTracks()[0];
-      if (track && shot && wantsTallerCrop(shot.width ?? 0, shot.height ?? 0)) {
+      if (track && shot && needsReelShape(shot.width ?? 0, shot.height ?? 0)) {
         try {
           await track.applyConstraints({
             width: { ideal: 1080 },
