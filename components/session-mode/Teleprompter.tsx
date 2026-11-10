@@ -397,18 +397,13 @@ export default function Teleprompter({
                 <div className="aspect-[9/16] h-full border-x border-dashed border-white/35" />
               </div>
             )}
-            {/* Lines to centre himself against.
-                He asked for these to stay: "i like how you have the lines
-                on the screen so i know how to center myself". They used to
-                be the edges of the crop, which have gone now the whole
-                picture is the crop, so they are thirds instead: stand on
-                the middle line, keep your eyes near the top one. */}
+            {/* A tick at the top middle, to line himself up against.
+                The dotted lines above do the rest: "the dotted lines
+                should guide me to be center". They are a guide now and
+                nothing more, since the whole frame is kept. */}
             {cameraOn && (
-              <div className="pointer-events-none absolute inset-0">
-                <div className="absolute inset-y-0 left-1/3 w-px bg-white/15" />
-                <div className="absolute inset-y-0 left-2/3 w-px bg-white/15" />
-                <div className="absolute inset-x-0 top-1/3 h-px bg-white/15" />
-                <div className="absolute inset-x-0 left-1/2 h-6 w-px -translate-x-1/2 bg-white/35" />
+              <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center">
+                <div className="h-5 w-px bg-white/40" />
               </div>
             )}
           </div>

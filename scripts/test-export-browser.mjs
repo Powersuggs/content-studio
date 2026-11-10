@@ -200,6 +200,7 @@ window.bigSourceExport = async function () {
     sourceWidth: 1920, sourceHeight: 1080,
     seconds: measured, wall: +wall.toFixed(1), bytes: res.blob.size,
     frames: frames.length, longestHold: +longestHold.toFixed(3),
+    firstFrame: frames.length ? +frames[0].toFixed(3) : null,
     fps: frames.length ? +(frames.length / measured).toFixed(1) : null,
   };
 };
@@ -398,11 +399,19 @@ try {
     Math.max(big.width, big.height) <= 960,
     `came out ${big.width}x${big.height}, which is what made his phone judder`,
   );
+  // This used to assert the opposite: that a landscape source came out
+  // reel shaped. He asked for the crop, saw it, and asked for it back
+  // out again: "I want the full video it shows the dotted lines should
+  // guide me to be center not the video saved and cut there".
   check(
-    "...and comes out reel shaped even from a landscape camera",
-    Math.abs(big.width / big.height - 9 / 16) < 0.02,
-    `${big.width}x${big.height} is ${(big.width / big.height).toFixed(3)} wide to tall, not 0.563, ` +
-      `so it cannot be posted without him cropping it himself`,
+    "...keeping everything he filmed, in the shape he filmed it",
+    Math.abs(big.width / big.height - big.sourceWidth / big.sourceHeight) < 0.02,
+    `${big.width}x${big.height} against a source of ${big.sourceWidth}x${big.sourceHeight}`,
+  );
+  check(
+    "the picture is there from the first moment",
+    big.firstFrame !== null && big.firstFrame < 0.15,
+    `the picture does not start until ${big.firstFrame}s, with sound already running`,
   );
   check(
     "a four second piece still takes about four seconds",

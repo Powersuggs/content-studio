@@ -21,22 +21,26 @@ export const REEL_ASPECT = 9 / 16;
 const EPSILON = 0.001;
 
 /**
- * Whether a camera giving this shape should be asked for a reel shape.
+ * Whether the camera should be asked for a different shape at all.
  *
- * True for anything wider than 9:16, which is every camera there is: a
- * laptop webcam at 16:9 and a phone front camera at 3:4 alike.
+ * It should not. Having now seen both, Aaron settled it: "I want the full
+ * video it shows the dotted lines should guide me to be center not the
+ * video saved and cut there". So the camera gives what it gives, the
+ * whole sensor, and the dotted lines are advice rather than scissors.
  *
- * This used to be true only for landscape cameras, leaving a phone to
- * film its whole sensor while the finished video kept only the middle.
- * That showed him a wider picture than he was going to get, and he
- * framed against it: "my arms are not long enough to hold the phone out
- * that far away". The crop happens either way, because a reel is 9:16
- * and no camera is. Doing it at the start means the picture on screen
- * while he films is the picture he ends up with.
+ * This is kept as a function, always false, rather than deleted, because
+ * the question has been answered three different ways across a week of
+ * him using it and the reasoning belongs somewhere findable:
+ *
+ *   Cropping at the camera is what made it feel zoomed in.
+ *   Cropping only at the export is what made the preview a lie.
+ *   Cropping at both is what put him out of arm's reach.
+ *
+ * Not cropping means Instagram does it at posting time, where he can see
+ * it happen and drag it about. That is the version he wants.
  */
-export function needsReelShape(width: number, height: number): boolean {
-  if (!width || !height) return false;
-  return width / height > REEL_ASPECT + EPSILON;
+export function needsReelShape(_width: number, _height: number): boolean {
+  return false;
 }
 
 /**
