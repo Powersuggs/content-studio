@@ -5,7 +5,7 @@ import {
   Scissors, ArrowLeft, Play, Pause, Undo2, Loader2, Trash2,
   ZoomIn, ZoomOut, ChevronLeft, ChevronRight, RotateCcw,
 } from "lucide-react";
-import { keepRanges, keptSeconds, type Span } from "@/lib/session/recut";
+import { keepRanges, keptSeconds, withBreath, type Span } from "@/lib/session/recut";
 import { canExport, exportCut } from "@/lib/session/export-video";
 import { useTakeAudio, SLICES_PER_SECOND } from "./useTakeAudio";
 import Waveform from "./Waveform";
@@ -15,6 +15,22 @@ import type { Take } from "./useRecorder";
 const NUDGE = 0.1;
 /** Zoom steps. 1 is the whole piece, 16 is a sixteenth of it. */
 const ZOOMS = [1, 2, 4, 8, 16];
+
+/**
+ * How much of each found pause to leave in, in seconds.
+ *
+ * "Maybe prompt it like a small break and don't cut the full silence out
+ * so it is more fluent on speaking like breaks." Taking every pause out
+ * is what makes an edit sound like a machine reading a list. Found gaps
+ * already keep about a sixth of a second at the edges, so these add to
+ * that. Only found gaps: a cut he drew himself means the bit he pointed
+ * at, exactly.
+ */
+const BREATHS = [
+  { label: "Tight", seconds: 0 },
+  { label: "Natural", seconds: 0.2 },
+  { label: "Relaxed", seconds: 0.45 },
+];
 
 /**
  * One stretch being taken out of the piece.
@@ -61,6 +77,7 @@ export default function EditRoom({
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const [breath, setBreath] = useState(BREATHS[1].seconds);
 
   const [cuts, setCuts] = useState<Cut[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -114,7 +131,20 @@ export default function EditRoom({
   }, [audio.loading, audio.loudness, audio.error, audio.quiet, cuts]);
 
   const list = useMemo(() => cuts ?? [], [cuts]);
-  const active = useMemo(() => list.filter((c) => !c.off), [list]);
+  /*
+   * What is actually removed.
+   *
+   * Found gaps are shortened by the breath; cuts he drew are left exactly
+   * where he put them. The list above keeps showing the gap as found, so
+   * changing the breath never makes his cuts appear to move.
+   */
+  const active = useMemo(() => {
+    const on = list.filter((c) => !c.off);
+    return [
+      ...withBreath(on.filter((c) => !c.mine), breath),
+      ...on.filter((c) => c.mine),
+    ].sort((a, b) => a.start - b.start);
+  }, [list, breath]);
   const ranges = useMemo(
     () => keepRanges(duration, active, trimStart, trimEnd),
     [duration, active, trimStart, trimEnd],
@@ -122,7 +152,9 @@ export default function EditRoom({
   const after = keptSeconds(ranges);
   const saving = Math.max(0, duration - after);
 
-  const activeRef = useRef<Cut[]>([]);
+  // Spans, not Cuts: once the breath is applied these are stretches of
+  // time to remove, and nothing downstream cares where they came from.
+  const activeRef = useRef<Span[]>([]);
   activeRef.current = active;
   const rangesRef = useRef<Span[]>([]);
   rangesRef.current = ranges;
@@ -392,6 +424,30 @@ export default function EditRoom({
               <ChevronRight size={16} />
             </button>
           </div>
+
+          {/* How much of each pause to leave in. */}
+          {list.some((c) => !c.mine && !c.off) && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-faint">Pauses</span>
+              {BREATHS.map((b) => (
+                <button
+                  key={b.label}
+                  type="button"
+                  onClick={() => setBreath(b.seconds)}
+                  className={`h-10 rounded-lg border px-3 text-xs ${
+                    breath === b.seconds
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border text-muted"
+                  }`}
+                >
+                  {b.label}
+                </button>
+              ))}
+              <span className="text-[11px] text-faint">
+                how much of each quiet spot stays in
+              </span>
+            </div>
+          )}
 
           {/* Marking a cut by hand. */}
           <div className="flex flex-wrap items-center gap-2">

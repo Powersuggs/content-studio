@@ -172,10 +172,35 @@ window.bigSourceExport = async function () {
   v.muted = true;
   await new Promise(ok => v.onloadeddata = ok);
   const measured = await durationOf(res.blob);
+
+  // Play the result and time every frame. An average alone hides the
+  // thing that actually looks wrong: a video that holds 24 a second and
+  // then stops dead for a third of a second averages fine and watches
+  // badly.
+  let frames = [];
+  if (typeof v.requestVideoFrameCallback === 'function') {
+    await new Promise(done => {
+      const step = (now, meta) => {
+        frames.push(meta.mediaTime);
+        if (v.ended || frames.length > 2000) done();
+        else v.requestVideoFrameCallback(step);
+      };
+      v.requestVideoFrameCallback(step);
+      v.onended = done;
+      v.muted = true;
+      v.play();
+    });
+  }
+  let longestHold = 0;
+  for (let i = 1; i < frames.length; i++) {
+    longestHold = Math.max(longestHold, frames[i] - frames[i - 1]);
+  }
   return {
     width: v.videoWidth, height: v.videoHeight,
     sourceWidth: 1920, sourceHeight: 1080,
     seconds: measured, wall: +wall.toFixed(1), bytes: res.blob.size,
+    frames: frames.length, longestHold: +longestHold.toFixed(3),
+    fps: frames.length ? +(frames.length / measured).toFixed(1) : null,
   };
 };
 
@@ -370,7 +395,7 @@ try {
   const big = await page.evaluate(() => bigSourceExport());
   check(
     "the export is scaled down rather than re-encoded at full size",
-    Math.max(big.width, big.height) <= 1280,
+    Math.max(big.width, big.height) <= 960,
     `came out ${big.width}x${big.height}, which is what made his phone judder`,
   );
   check(
@@ -383,6 +408,23 @@ try {
     "a four second piece still takes about four seconds",
     big.wall < 9,
     `took ${big.wall}s, so it is falling behind real time`,
+  );
+  check(
+    "the picture never holds still for long",
+    big.longestHold < 0.25,
+    `the longest the picture sits on one frame is ${big.longestHold}s, which is seen as a stutter`,
+  );
+  // A floor, not a standard. How many frames a second this manages
+  // depends entirely on the machine: a shared cloud box with no graphics
+  // hardware manages about fifteen on this clip, Aaron's phone managed
+  // under nineteen on his. Asserting a number either could fail on a day
+  // the box is busy, so this catches a slideshow and leaves the quality
+  // question to the evenness check above, which is the one that decides
+  // whether a video looks right.
+  check(
+    "it is a video rather than a slideshow",
+    big.fps !== null && big.fps >= 10,
+    `came out at ${big.fps} frames a second`,
   );
 
   const joined = await page.evaluate(() => runJoin());

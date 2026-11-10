@@ -389,12 +389,26 @@ export default function Teleprompter({
               }`}
               style={{ transform: "scaleX(-1)" }}
             />
-            {/* What a reel keeps. Instagram wants 9:16 and the camera gives
-                something wider, so the difference gets cut somewhere. Better
-                he sees where, now, than finds out after posting. */}
+            {/* What a reel keeps, when the camera insists on giving more
+                than one. Normally it does not any more, because the camera
+                is asked for a reel shape from the start. */}
             {cameraOn && showsReelGuide(camera.aspect) && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <div className="aspect-[9/16] h-full border-x border-dashed border-white/35" />
+              </div>
+            )}
+            {/* Lines to centre himself against.
+                He asked for these to stay: "i like how you have the lines
+                on the screen so i know how to center myself". They used to
+                be the edges of the crop, which have gone now the whole
+                picture is the crop, so they are thirds instead: stand on
+                the middle line, keep your eyes near the top one. */}
+            {cameraOn && (
+              <div className="pointer-events-none absolute inset-0">
+                <div className="absolute inset-y-0 left-1/3 w-px bg-white/15" />
+                <div className="absolute inset-y-0 left-2/3 w-px bg-white/15" />
+                <div className="absolute inset-x-0 top-1/3 h-px bg-white/15" />
+                <div className="absolute inset-x-0 left-1/2 h-6 w-px -translate-x-1/2 bg-white/35" />
               </div>
             )}
           </div>

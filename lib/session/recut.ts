@@ -171,6 +171,28 @@ export function keepRanges(
   return keep.filter((r) => r.end - r.start > 0.04);
 }
 
+/**
+ * Leave a little of each gap in, so speech still breathes.
+ *
+ * Aaron, hearing his first auto-cut take: "Maybe prompt it like a small
+ * break and don't cut the full silence out so it is more fluent on
+ * speaking like breaks". Taking every pause out entirely is what makes an
+ * edit sound like a machine reading a list; people pause between thoughts
+ * and the ear expects it. This shrinks each cut by the same amount at
+ * both ends, so the pause is shortened rather than removed.
+ *
+ * A cut that would be left shorter than a frame is dropped: at that point
+ * it is not removing anything, and a string of them would make the export
+ * seek about for no reason.
+ */
+export function withBreath(cuts: Span[], seconds: number): Span[] {
+  if (seconds <= 0) return cuts;
+  const half = seconds / 2;
+  return cuts
+    .map((c) => ({ start: c.start + half, end: c.end - half }))
+    .filter((c) => c.end - c.start > 0.05);
+}
+
 /** How long the finished video will be. */
 export function keptSeconds(ranges: Span[]): number {
   return ranges.reduce((n, r) => n + (r.end - r.start), 0);

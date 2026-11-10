@@ -15,7 +15,7 @@
  *
  *   node scripts/test-framing.mjs
  */
-import { fitFrame, showsReelGuide, wantsTallerCrop, REEL_ASPECT } from "../lib/session/framing.ts";
+import { fitFrame, showsReelGuide, needsReelShape, REEL_ASPECT } from "../lib/session/framing.ts";
 
 let passed = 0;
 const failures = [];
@@ -31,18 +31,22 @@ const IPHONE_FRONT = 3 / 4;       // 1440x1920, portrait 4:3
 const LAPTOP_WEBCAM = 16 / 9;     // 1920x1080, landscape
 const REEL = REEL_ASPECT;         // 1080x1920
 
-console.log("  Which cameras get cropped");
+console.log("  Which cameras get asked for a reel shape");
 check(
-  "a laptop webcam is cropped, because a reel cannot be a letterbox",
-  wantsTallerCrop(1920, 1080),
+  "a laptop webcam does, because a reel cannot be a letterbox",
+  needsReelShape(1920, 1080),
 );
 check(
-  "an iPhone front camera is LEFT ALONE, which is the zoom he complained about",
-  !wantsTallerCrop(1440, 1920),
-  "cropping a portrait sensor to 9:16 is what threw away a quarter of the width",
+  "an iPhone front camera does TOO, so the preview is the finished frame",
+  needsReelShape(1440, 1920),
+  "leaving it wide showed him more than the export keeps, and he framed against that",
 );
-check("a square camera is left alone", !wantsTallerCrop(1080, 1080));
-check("nonsense dimensions do not trigger a crop", !wantsTallerCrop(0, 0));
+check("a square camera does", needsReelShape(1080, 1080));
+check(
+  "a frame already 9:16 is left alone, because there is nothing to take",
+  !needsReelShape(1080, 1920),
+);
+check("nonsense dimensions do not trigger a crop", !needsReelShape(0, 0));
 
 console.log("\n  The preview must show exactly what is recorded");
 // The space the camera gets on an iPhone 13 in Safari, under the prompter
