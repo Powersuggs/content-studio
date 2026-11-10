@@ -593,7 +593,9 @@ export default function EditRoom({
               </div>
               <p className="text-xs text-muted">
                 Making the cut video. This runs in real time, so it takes
-                about {Math.ceil(after)} seconds. Leave this screen open.
+                about {Math.ceil(after)} seconds. Keep this page on screen
+                and do not let the phone lock, or the picture stops and the
+                sound carries on without it.
               </p>
               <button
                 type="button"
@@ -615,8 +617,10 @@ export default function EditRoom({
             </button>
           )}
           <p className="mt-2 text-[11px] text-faint">
-            Hear it with Play with cuts first. The edited video is kept as a
-            new piece; the one you filmed stays as it is.
+            Hear it with Play with cuts first. The edited video comes out
+            tall, cropped to the middle the way the guide showed while you
+            filmed, and is kept as a new piece; the one you filmed stays as
+            it is.
           </p>
         </div>
       </div>

@@ -158,6 +158,27 @@ window.runJoin = async function () {
 // Read the finished sound and measure how violently it moves at the join
 // compared with how it moves normally. A cut made by chopping a waveform
 // at an arbitrary sample leaves a step, and a step is a click.
+// Export a big source and report the size and frame rate of the result.
+// Aaron's first real export was 1920x1080 and averaged 21 frames a second
+// with seven half second freezes, because a phone cannot paint and encode
+// two million pixels in real time while playing the video back.
+window.bigSourceExport = async function () {
+  const src = await makePiece(4, '#00aa00', 1920, 1080);
+  const t0 = performance.now();
+  const res = await exportCut(src, keepRanges(4, []));
+  const wall = (performance.now() - t0) / 1000;
+  const v = document.createElement('video');
+  v.src = URL.createObjectURL(res.blob);
+  v.muted = true;
+  await new Promise(ok => v.onloadeddata = ok);
+  const measured = await durationOf(res.blob);
+  return {
+    width: v.videoWidth, height: v.videoHeight,
+    sourceWidth: 1920, sourceHeight: 1080,
+    seconds: measured, wall: +wall.toFixed(1), bytes: res.blob.size,
+  };
+};
+
 window.audioAtJoin = async function (joinAt) {
   // A source with one unbroken tone all the way through, NOT the one with
   // deliberate silences in it.
@@ -328,9 +349,14 @@ try {
   console.log("\n  The sound across the join");
   // The cut removes 3s to 6s, so in the finished file the join sits at 3s.
   const sound = await page.evaluate(() => audioAtJoin(3));
+  // Four, not two. Measured across repeated runs on working code the
+  // ratio sits between about 0.7 and 2.1, because the encoder's own noise
+  // moves it; the broken version measured 9.8. A limit of two sat inside
+  // that spread and failed on a good build, which is a test that cries
+  // wolf rather than a test.
   check(
     "the sound does not jump at the cut",
-    sound.atTheJoin <= sound.typical * 2,
+    sound.atTheJoin <= sound.typical * 4,
     `the step at the join is ${sound.atTheJoin.toFixed(4)} against a normal ${sound.typical.toFixed(4)}, ` +
       `which is ${(sound.atTheJoin / sound.typical).toFixed(1)} times bigger and is heard as a click`,
   );
@@ -338,6 +364,25 @@ try {
     "the sound and the picture are the same length",
     Math.abs(sound.audioSeconds - 6) < 0.2,
     `sound runs ${sound.audioSeconds.toFixed(3)}s against about 6s of picture`,
+  );
+
+  console.log("\n  A full size source");
+  const big = await page.evaluate(() => bigSourceExport());
+  check(
+    "the export is scaled down rather than re-encoded at full size",
+    Math.max(big.width, big.height) <= 1280,
+    `came out ${big.width}x${big.height}, which is what made his phone judder`,
+  );
+  check(
+    "...and comes out reel shaped even from a landscape camera",
+    Math.abs(big.width / big.height - 9 / 16) < 0.02,
+    `${big.width}x${big.height} is ${(big.width / big.height).toFixed(3)} wide to tall, not 0.563, ` +
+      `so it cannot be posted without him cropping it himself`,
+  );
+  check(
+    "a four second piece still takes about four seconds",
+    big.wall < 9,
+    `took ${big.wall}s, so it is falling behind real time`,
   );
 
   const joined = await page.evaluate(() => runJoin());
