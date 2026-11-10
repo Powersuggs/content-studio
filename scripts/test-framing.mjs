@@ -31,22 +31,18 @@ const IPHONE_FRONT = 3 / 4;       // 1440x1920, portrait 4:3
 const LAPTOP_WEBCAM = 16 / 9;     // 1920x1080, landscape
 const REEL = REEL_ASPECT;         // 1080x1920
 
-console.log("  Which cameras get asked for a reel shape");
+console.log("  No camera gets cropped any more");
 check(
-  "a laptop webcam does, because a reel cannot be a letterbox",
-  needsReelShape(1920, 1080),
+  "a phone keeps its whole sensor",
+  !needsReelShape(1440, 1920),
+  "cropping at the camera is what made it feel zoomed in",
 );
 check(
-  "an iPhone front camera does TOO, so the preview is the finished frame",
-  needsReelShape(1440, 1920),
-  "leaving it wide showed him more than the export keeps, and he framed against that",
+  "so does a laptop webcam",
+  !needsReelShape(1920, 1080),
+  "he asked for the full picture and the lines as a guide, not as scissors",
 );
-check("a square camera does", needsReelShape(1080, 1080));
-check(
-  "a frame already 9:16 is left alone, because there is nothing to take",
-  !needsReelShape(1080, 1920),
-);
-check("nonsense dimensions do not trigger a crop", !needsReelShape(0, 0));
+check("and a square camera", !needsReelShape(1080, 1080));
 
 console.log("\n  The preview must show exactly what is recorded");
 // The space the camera gets on an iPhone 13 in Safari, under the prompter

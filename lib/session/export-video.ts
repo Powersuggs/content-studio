@@ -47,23 +47,22 @@ interface CanvasTrack extends MediaStreamTrack {
  */
 const MAX_LONG_EDGE = 960;
 
-/**
- * Frames a second to aim for.
+/*
+ * There was a frame rate cap here, and it made things worse.
  *
- * Deliberately below the thirty a phone films at. Aaron's second export
- * came back averaging under nineteen frames a second with five freezes of
- * a third of a second each in six seconds of video, and the pictures
- * either side of four of those five showed no more movement than any
- * other third of a second, which means they were not the cuts. They were
- * the encoder falling behind.
+ * The reasoning was that pushing thirty frames a second at a device which
+ * manages twenty just builds a queue, so asking for twenty four would be
+ * smoother. What it actually did was skip every other frame: a source
+ * frame arrives every 33ms, the rule wanted 42ms between pushes, so every
+ * second frame failed the test and the export ran at fifteen.
  *
- * Pushing thirty frames a second at a device that can manage twenty does
- * not get thirty. It gets twenty with the rest queued up, and the queue
- * comes out as the picture stopping dead. Asking for twenty four and
- * letting the extra source frames go by gives an evenly paced video,
- * which is the one that looks right.
+ * Measured on Aaron's phone: 18.8 frames a second before the cap, 13.8
+ * after. A quarter worse, from an optimisation. Removed.
+ *
+ * To thin frames properly you have to carry the remainder from one to the
+ * next rather than compare against a fixed gap. Not worth doing, because
+ * the device was never the thing deciding to drop them.
  */
-const TARGET_FPS = 24;
 
 /** Width over height of a reel: 1080 by 1920. */
 const REEL_SHAPE = 9 / 16;
@@ -284,13 +283,21 @@ export async function exportSequence(
      * sides, which is what the guide showed. A landscape take loses a
      * lot, which is the price of it having been filmed wide.
      */
+    /*
+     * The whole frame, scaled down, not cropped.
+     *
+     * "I want the full video it shows the dotted lines should guide me to
+     * be center not the video saved and cut there." Cropping to a reel
+     * here is what put him out of arm's reach, so Instagram can do it at
+     * posting time where he can see it happen and drag it about.
+     */
     const sourceW = video.videoWidth || 1080;
     const sourceH = video.videoHeight || 1920;
-    const outH = Math.min(MAX_LONG_EDGE, sourceH);
+    const shrink = Math.min(1, MAX_LONG_EDGE / Math.max(sourceW, sourceH));
     const canvas = document.createElement("canvas");
     // Even numbers: some encoders refuse an odd width or height.
-    canvas.height = Math.max(2, Math.round(outH / 2) * 2);
-    canvas.width = Math.max(2, Math.round((outH * REEL_SHAPE) / 2) * 2);
+    canvas.width = Math.max(2, Math.round((sourceW * shrink) / 2) * 2);
+    canvas.height = Math.max(2, Math.round((sourceH * shrink) / 2) * 2);
     // alpha false lets the browser skip compositing work it cannot use.
     const paint = canvas.getContext("2d", { alpha: false });
     if (!paint) throw new Error("This browser cannot draw video frames.");
@@ -360,16 +367,11 @@ export async function exportSequence(
     let index = 0;
     let produced = 0; // seconds of finished video written so far
 
-    video.currentTime = steps[0].start;
-    await once(video, "seeked");
-    recorder.start();
-    await video.play();
-
     const paintFrame = () => {
-      // Filled, not fitted. The frame is cropped to the middle rather
-      // than letterboxed, because the output shape is now fixed at a
-      // reel and bars down the sides of a reel are worse than a crop.
-      const scale = Math.max(
+      // Fitted, not filled, so nothing he filmed is thrown away. Only
+      // matters when joining pieces of different shapes; a single piece
+      // fills its own frame exactly.
+      const scale = Math.min(
         canvas.width / (video.videoWidth || canvas.width),
         canvas.height / (video.videoHeight || canvas.height),
       );
@@ -396,11 +398,8 @@ export async function exportSequence(
       lastFrameAt = now;
       framesPushed += 1;
     };
-    const minGapMs = 1000 / TARGET_FPS;
     const pump = () => {
-      // Let a source frame go by rather than queue it behind one the
-      // encoder has not finished with.
-      if (Date.now() - lastFrameAt >= minGapMs - 1) pushFrame();
+      pushFrame();
       frameHandle = video.requestVideoFrameCallback(pump);
     };
 
@@ -425,6 +424,17 @@ export async function exportSequence(
         pushFrame();
       }
     }, 200);
+    // Everything is ready to draw, so start here rather than earlier:
+    // the recording gets a painted frame from its very first moment.
+    // His last export had no picture at all for 480ms while it waited
+    // for the camera's own first frame, so it opened on nothing with his
+    // voice already going.
+    video.currentTime = steps[0].start;
+    await once(video, "seeked");
+    recorder.start();
+    pushFrame();
+    await video.play();
+
     if (framesExact) {
       frameHandle = video.requestVideoFrameCallback(pump);
     } else {
