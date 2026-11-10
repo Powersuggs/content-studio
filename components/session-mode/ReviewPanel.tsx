@@ -215,7 +215,8 @@ export default function ReviewPanel({
               <p className="text-xs text-muted">
                 Joining your {takes.length} pieces. This plays them through
                 to record them, so it takes about {Math.ceil(total)} seconds.
-                Leave this screen open.
+                Keep this page on screen and do not let the phone lock, or
+                the picture stops and the sound carries on without it.
               </p>
               <button
                 type="button"

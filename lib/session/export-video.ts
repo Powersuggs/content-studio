@@ -34,6 +34,21 @@ import type { Span } from "./recut";
 interface CanvasTrack extends MediaStreamTrack {
   requestFrame?: () => void;
 }
+
+/**
+ * The longest side of an exported video, in pixels.
+ *
+ * Smaller than the source on purpose. Aaron's first real export came back
+ * at 1920 by 1080 and averaged twenty one frames a second with seven half
+ * second freezes in it, because painting and encoding two million pixels
+ * in real time, while playing the video back at the same time, is more
+ * than a phone has spare. 1280 is under half the pixels, and the
+ * difference survives Instagram's own re-encoding anyway.
+ */
+const MAX_LONG_EDGE = 1280;
+
+/** Width over height of a reel: 1080 by 1920. */
+const REEL_SHAPE = 9 / 16;
 import { sourceTimeAt } from "./recut";
 
 export interface ExportProgress {
@@ -227,10 +242,39 @@ export async function exportSequence(
     };
     await load(steps[0].piece);
 
+    /*
+     * Smaller than the source on purpose.
+     *
+     * Aaron's first real export came back at 1920 by 1080 and averaged
+     * twenty one frames a second with seven half second freezes in it,
+     * because painting and encoding two million pixels thirty times a
+     * second in real time is more than a phone has spare. Two thirds of
+     * the width is under half the pixels, and the difference between that
+     * and the source survives Instagram's own re-encoding anyway.
+     */
+    /*
+     * Always reel shaped.
+     *
+     * Aaron's first real export came out 1920 by 1080, because the camera
+     * would not give a tall frame and the wide one was kept, which is the
+     * designed fallback. A landscape file cannot be posted as a reel
+     * without him cropping it himself afterwards, and the dashed guide he
+     * frames against while filming already promises a 9:16 middle. So
+     * that promise is kept here: the export is the guide.
+     *
+     * A piece already 9:16 loses nothing. A phone sensor at 3:4 loses the
+     * sides, which is what the guide showed. A landscape take loses a
+     * lot, which is the price of it having been filmed wide.
+     */
+    const sourceW = video.videoWidth || 1080;
+    const sourceH = video.videoHeight || 1920;
+    const outH = Math.min(MAX_LONG_EDGE, sourceH);
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 1080;
-    canvas.height = video.videoHeight || 1920;
-    const paint = canvas.getContext("2d");
+    // Even numbers: some encoders refuse an odd width or height.
+    canvas.height = Math.max(2, Math.round(outH / 2) * 2);
+    canvas.width = Math.max(2, Math.round((outH * REEL_SHAPE) / 2) * 2);
+    // alpha false lets the browser skip compositing work it cannot use.
+    const paint = canvas.getContext("2d", { alpha: false });
     if (!paint) throw new Error("This browser cannot draw video frames.");
 
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -304,10 +348,10 @@ export async function exportSequence(
     await video.play();
 
     const paintFrame = () => {
-      // Fitted, not stretched, and on a black ground so a piece of a
-      // different shape sits in bars rather than smearing the last frame
-      // of the one before it down the sides.
-      const scale = Math.min(
+      // Filled, not fitted. The frame is cropped to the middle rather
+      // than letterboxed, because the output shape is now fixed at a
+      // reel and bars down the sides of a reel are worse than a crop.
+      const scale = Math.max(
         canvas.width / (video.videoWidth || canvas.width),
         canvas.height / (video.videoHeight || canvas.height),
       );
@@ -319,22 +363,70 @@ export async function exportSequence(
     };
 
     let frameHandle = 0;
-    const pump = () => {
+    let lastFrameAt = Date.now();
+    let framesPushed = 0;
+    let longestGapMs = 0;
+    const pushFrame = () => {
       paintFrame();
       // Hand this exact frame to the recording. Without it a manual
       // capture stream records nothing at all.
       videoTrack.requestFrame?.();
+      const now = Date.now();
+      if (recorder?.state === "recording") {
+        longestGapMs = Math.max(longestGapMs, now - lastFrameAt);
+      }
+      lastFrameAt = now;
+      framesPushed += 1;
+    };
+    const pump = () => {
+      pushFrame();
       frameHandle = video.requestVideoFrameCallback(pump);
     };
+
+    /*
+     * A second way to keep frames coming.
+     *
+     * requestVideoFrameCallback stops firing when the page stops being
+     * visible, which is what the screen dimming or switching apps does.
+     * The sound carries on, because audio is not throttled, so what comes
+     * out is a video whose picture stops partway through and whose sound
+     * runs to the end. That is exactly what Aaron's first real export
+     * did: thirty seconds of him talking over thirteen seconds of
+     * picture, frozen on the last frame for the rest.
+     *
+     * This timer pushes a frame whenever none has arrived for a while.
+     * Timers are throttled in the background too, so it is not a cure,
+     * but a slow picture beats no picture, and the check after recording
+     * refuses to hand over a file where it went badly wrong.
+     */
+    const keepAlive = setInterval(() => {
+      if (recorder?.state === "recording" && Date.now() - lastFrameAt > 250) {
+        pushFrame();
+      }
+    }, 200);
     if (framesExact) {
       frameHandle = video.requestVideoFrameCallback(pump);
     } else {
       const loop = () => {
-        paintFrame();
+        pushFrame();
         raf = requestAnimationFrame(loop);
       };
       raf = requestAnimationFrame(loop);
     }
+
+    // Ask the screen to stay on. Without this a phone dims and locks
+    // partway through a long export and takes the picture with it.
+    let wakeLock: WakeLockSentinel | null = null;
+    try {
+      wakeLock = (await navigator.wakeLock?.request("screen")) ?? null;
+    } catch {
+      // Refused or unsupported. The checks below still catch the damage.
+    }
+    let wentAway = false;
+    const watchVisibility = () => {
+      if (document.visibilityState === "hidden") wentAway = true;
+    };
+    document.addEventListener("visibilitychange", watchVisibility);
 
     /** Wait until a real frame from the new position has been drawn. */
     const nextFrame = () =>
@@ -398,9 +490,12 @@ export async function exportSequence(
     });
 
     cancelAnimationFrame(raf);
+    clearInterval(keepAlive);
+    document.removeEventListener("visibilitychange", watchVisibility);
     if (framesExact && frameHandle) {
       video.cancelVideoFrameCallback(frameHandle);
     }
+    await wakeLock?.release().catch(() => undefined);
     // Ease out at the end too, so the last thing in the file is not a
     // waveform stopping mid swing.
     await fade(0);
@@ -413,6 +508,39 @@ export async function exportSequence(
         "The video came out empty. Nothing was saved, so your original pieces are untouched.",
       );
     }
+
+    /*
+     * Refuse a file whose picture stopped.
+     *
+     * Judged on the longest stretch with no frame at all rather than on
+     * the frame count, because the two failures look identical in a total
+     * and are not at all alike to watch. A video running slowly is poor.
+     * A video whose picture froze two thirds of the way through, over a
+     * soundtrack that carries on talking, is not a video. That is what
+     * Aaron's first real export was, and it was handed to him as though
+     * it had worked, which is the worst thing this could do: it looks
+     * finished until you watch it.
+     *
+     * The frame count is kept as a second line, for a machine so far
+     * behind that what comes out is a slideshow.
+     */
+    const STALL_MS = 2000;
+    const SLIDESHOW_FPS = 6;
+    if (longestGapMs > STALL_MS || framesPushed < total * SLIDESHOW_FPS) {
+      const stopped = longestGapMs > STALL_MS;
+      throw new Error(
+        [
+          stopped
+            ? `The picture stopped for ${(longestGapMs / 1000).toFixed(1)} seconds partway through,`
+            : "The picture came out too jerky to use,",
+          wentAway
+            ? "because this page stopped being on screen. Keep it open and the screen awake while it works."
+            : "because this device could not keep up with making the video while playing it back. A shorter piece, or this one cut in two, should manage it.",
+          "Nothing was saved, so your pieces are untouched.",
+        ].join(" "),
+      );
+    }
+
     return { blob, type, seconds: total };
   } finally {
     cleanup();
