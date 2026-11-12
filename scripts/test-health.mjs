@@ -18,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const out = mkdtempSync(join(tmpdir(), "health-"));
 execFileSync("npx", ["tsc", "lib/health/expected.ts", "--outDir", out, "--module", "es2022",
-  "--target", "es2022", "--moduleResolution", "bundler", "--noEmitOnError"],
+  "--target", "es2022", "--moduleResolution", "bundler", "--noEmitOnError", "--skipLibCheck"],
   { cwd: ROOT, stdio: "pipe" });
 const { judge, repairScript, MUST_BE_OPEN, MUST_BE_LOCKED } =
   await import(pathToFileURL(join(out, "expected.js")).href);

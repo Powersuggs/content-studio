@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const out = mkdtempSync(join(tmpdir(), "chunks-"));
 execFileSync("npx", ["tsc", "lib/session/chunks.ts", "--outDir", out, "--module", "es2022",
-  "--target", "es2022", "--moduleResolution", "bundler", "--noEmitOnError"],
+  "--target", "es2022", "--moduleResolution", "bundler", "--noEmitOnError", "--skipLibCheck"],
   { cwd: ROOT, stdio: "pipe" });
 const { chunkScript, CHUNK_TARGET } =
   await import(pathToFileURL(join(out, "chunks.js")).href);

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Play, Smartphone, Download, X, Scissors, Combine } from "lucide-react";
 import EditRoom from "./EditRoom";
-import { canExport, exportSequence } from "@/lib/session/export-video";
+import { chooseRoute, cutPieces, type RouteChoice } from "@/lib/session/export";
 import type { Take } from "./useRecorder";
 
 /**
@@ -52,14 +52,14 @@ export default function ReviewPanel({
   const [joining, setJoining] = useState(false);
   const [joinProgress, setJoinProgress] = useState(0);
   const [joinProblem, setJoinProblem] = useState<string | null>(null);
-  const [canMakeVideo, setCanMakeVideo] = useState<boolean | null>(null);
+  const [plan, setPlan] = useState<RouteChoice | null>(null);
   const joinAbort = useRef<AbortController | null>(null);
 
   // Asked with the real pieces rather than guessed, so the button is not
   // offered to a browser that will refuse it.
   useEffect(() => {
     let alive = true;
-    canExport().then((r) => alive && setCanMakeVideo(r.ok));
+    chooseRoute().then((r) => alive && setPlan(r));
     return () => {
       alive = false;
     };
@@ -82,8 +82,9 @@ export default function ReviewPanel({
     setJoining(true);
     setJoinProgress(0);
     try {
-      const result = await exportSequence(
+      const result = await cutPieces(
         takes.map((t) => ({ source: t.file, ranges: [{ start: 0, end: t.seconds }] })),
+        plan?.route ?? "playback",
         { signal: controller.signal, onProgress: (p) => setJoinProgress(p.done) },
       );
       const extension = result.type.includes("mp4") ? "mp4" : "webm";
@@ -187,7 +188,7 @@ export default function ReviewPanel({
                   <Play size={15} />
                   {playingAll ? "Playing all" : "Play all in order"}
                 </button>
-                {takes.length > 1 && canMakeVideo !== false && !joining && (
+                {takes.length > 1 && plan?.route !== "none" && !joining && (
                   <button
                     type="button"
                     onClick={joinAll}
@@ -213,10 +214,9 @@ export default function ReviewPanel({
                 />
               </div>
               <p className="text-xs text-muted">
-                Joining your {takes.length} pieces. This plays them through
-                to record them, so it takes about {Math.ceil(total)} seconds.
-                Keep this page on screen and do not let the phone lock, or
-                the picture stops and the sound carries on without it.
+                Joining your {takes.length} pieces, {plan?.estimate(total) ?? "shortly"}.
+                {plan?.route === "playback" &&
+                  " It plays them through to record them, so keep this page on screen and do not let the phone lock, or the picture stops and the sound carries on without it."}
               </p>
               <button
                 type="button"

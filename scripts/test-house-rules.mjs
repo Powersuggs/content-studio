@@ -19,7 +19,7 @@ const out = mkdtempSync(join(tmpdir(), "house-rules-"));
 execFileSync(
   "npx",
   ["tsc", "lib/writing/house-rules.ts", "--outDir", out, "--module", "es2022",
-   "--target", "es2022", "--moduleResolution", "bundler"],
+   "--target", "es2022", "--moduleResolution", "bundler", "--skipLibCheck"],
   { cwd: ROOT, stdio: "pipe" },
 );
 

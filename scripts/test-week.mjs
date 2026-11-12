@@ -37,7 +37,7 @@ writeFileSync(
   lift("app/this-week/page.tsx", "weekFrom") + "\n\n" + lift("components/queue/WeekBoard.tsx", "dayLabel"),
 );
 execFileSync("npx", ["tsc", join(out, "lifted.ts"), "--outDir", out, "--module", "es2022",
-  "--target", "es2022", "--moduleResolution", "bundler", "--noEmitOnError"],
+  "--target", "es2022", "--moduleResolution", "bundler", "--noEmitOnError", "--skipLibCheck"],
   { cwd: ROOT, stdio: "pipe" });
 const { weekFrom, dayLabel } = await import(pathToFileURL(join(out, "lifted.js")).href);
 
