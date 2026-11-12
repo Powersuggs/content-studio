@@ -6,7 +6,7 @@ import {
   ZoomIn, ZoomOut, ChevronLeft, ChevronRight, RotateCcw,
 } from "lucide-react";
 import { keepRanges, keptSeconds, withBreath, type Span } from "@/lib/session/recut";
-import { canExport, exportCut } from "@/lib/session/export-video";
+import { chooseRoute, cutPieces, type RouteChoice } from "@/lib/session/export";
 import { useTakeAudio, SLICES_PER_SECOND } from "./useTakeAudio";
 import Waveform from "./Waveform";
 import type { Take } from "./useRecorder";
@@ -96,14 +96,14 @@ export default function EditRoom({
   const [working, setWorking] = useState(false);
   const [progress, setProgress] = useState(0);
   const [problem, setProblem] = useState<string | null>(null);
-  const [ability, setAbility] = useState<{ ok: boolean; reason: string | null } | null>(null);
+  const [plan, setPlan] = useState<RouteChoice | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const duration = audio.seconds || take.seconds;
 
   useEffect(() => {
     let alive = true;
-    canExport().then((r) => alive && setAbility(r));
+    chooseRoute().then((r) => alive && setPlan(r));
     return () => {
       alive = false;
     };
@@ -274,10 +274,11 @@ export default function EditRoom({
     setProgress(0);
     try {
       stopPlaying();
-      const result = await exportCut(take.file, ranges, {
-        signal: controller.signal,
-        onProgress: (p) => setProgress(p.done),
-      });
+      const result = await cutPieces(
+        [{ source: take.file, ranges }],
+        plan?.route ?? "playback",
+        { signal: controller.signal, onProgress: (p) => setProgress(p.done) },
+      );
       const extension = result.type.includes("mp4") ? "mp4" : "webm";
       const file = new File([result.blob], `${stem(take.file.name)}-edited.${extension}`, {
         type: result.type,
@@ -634,9 +635,7 @@ export default function EditRoom({
               <span className="text-muted">, losing {saving.toFixed(1)}s</span>
             )}
           </p>
-          {ability && !ability.ok && (
-            <p className="mt-2 text-xs text-warn">{ability.reason}</p>
-          )}
+          {plan?.reason && <p className="mt-2 text-xs text-faint">{plan.reason}</p>}
           {problem && <p className="mt-2 text-xs text-warn">{problem}</p>}
 
           {working ? (
@@ -648,10 +647,9 @@ export default function EditRoom({
                 />
               </div>
               <p className="text-xs text-muted">
-                Making the cut video. This runs in real time, so it takes
-                about {Math.ceil(after)} seconds. Keep this page on screen
-                and do not let the phone lock, or the picture stops and the
-                sound carries on without it.
+                Making the cut video, {plan?.estimate(after) ?? "shortly"}.
+                {plan?.route === "playback" &&
+                  " It runs in real time, so keep this page on screen and do not let the phone lock, or the picture stops and the sound carries on without it."}
               </p>
               <button
                 type="button"
@@ -665,11 +663,13 @@ export default function EditRoom({
             <button
               type="button"
               onClick={makeTheCut}
-              disabled={untouched || (ability ? !ability.ok : false) || ranges.length === 0}
+              disabled={untouched || plan?.route === "none" || ranges.length === 0}
               className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-accent text-sm font-medium text-bg disabled:opacity-40"
             >
               <Scissors size={15} />
-              {untouched ? "Nothing to cut yet" : `Make the cut (about ${Math.ceil(after)}s)`}
+              {untouched
+                ? "Nothing to cut yet"
+                : `Make the cut (${plan?.estimate(after) ?? "a moment"})`}
             </button>
           )}
           <p className="mt-2 text-[11px] text-faint">

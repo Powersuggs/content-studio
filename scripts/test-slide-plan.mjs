@@ -23,7 +23,7 @@ try {
   execFileSync(
     "npx",
     ["tsc", "lib/slides/design.ts", "lib/slides/plan.ts",
-     "--outDir", out, "--module", "es2022", "--target", "es2022", "--moduleResolution", "bundler"],
+     "--outDir", out, "--module", "es2022", "--target", "es2022", "--moduleResolution", "bundler", "--skipLibCheck"],
     { cwd: ROOT, stdio: "pipe" },
   );
 } catch (e) {
