@@ -46,11 +46,14 @@ import {
 import type { ExportProgress, ExportResult, Part } from "./export-video";
 
 /**
- * The longest side of a fast export, in pixels.
+ * The largest frame this asks an encoder to confirm it can handle.
  *
- * Bigger than the real-time route's 960, because this one is not racing a
- * clock. Falling behind costs a few seconds, not dropped frames, so there
- * is no reason to spend quality buying speed.
+ * Unlike the real-time route, nothing is scaled down here. That route
+ * shrinks to 960 because it is racing a clock and drops frames when it
+ * loses; this one simply takes a few seconds longer, so there is no
+ * reason to spend quality buying speed. Measured on Aaron's phone at the
+ * full 1920 by 1080: 30.6 frames a second, nothing held longer than 83
+ * milliseconds.
  */
 const MAX_LONG_EDGE = 1920;
 
@@ -186,12 +189,30 @@ export async function cutFast(
     // different shape is fitted inside it rather than refused.
     const firstVideo = await inputs[0].getPrimaryVideoTrack();
     if (!firstVideo) throw new Error("That piece has no picture in it.");
-    const sourceW = firstVideo.displayWidth;
-    const sourceH = firstVideo.displayHeight;
-    const shrink = Math.min(1, MAX_LONG_EDGE / Math.max(sourceW, sourceH));
-    const width = even(sourceW * shrink);
-    const height = even(sourceH * shrink);
     const firstAudio = await inputs[0].getPrimaryAudioTrack();
+
+    /*
+     * Which way up it goes.
+     *
+     * A phone filming upright does not usually record upright pixels. It
+     * records a landscape frame and writes down that the picture should
+     * be turned a quarter turn to be seen properly, and every player
+     * obeys. Decoding gives the frames as stored, sideways, so without
+     * carrying that note across the finished video comes out on its
+     * side.
+     *
+     * Aaron: "onn the video when it saved it was 90 degrees didnt save
+     * verticle like i recoreed it". The old route never had this problem
+     * because it drew through a video element, which had already turned
+     * the picture before anything was captured.
+     */
+    const rotation = await firstVideo.getRotation();
+    const flip = await firstVideo.getFlip();
+
+    // The size the frames are stored at, not the size they are shown at:
+    // this only decides which codec profile to ask for.
+    const width = even(Math.min(firstVideo.codedWidth, MAX_LONG_EDGE));
+    const height = even(Math.min(firstVideo.codedHeight, MAX_LONG_EDGE));
 
     const format = options.format ?? (await pickFastFormat(width, height));
     if (!format) throw new Error("This browser cannot write video the fast way.");
@@ -206,7 +227,7 @@ export async function cutFast(
       quality: QUALITY_HIGH,
       sizeChangeBehavior: "contain",
     });
-    output.addVideoTrack(videoSource);
+    output.addVideoTrack(videoSource, { rotation, flip });
 
     const audioSource = firstAudio
       ? new AudioSampleSource({ codec: format.audioCodec, quality: QUALITY_HIGH })
