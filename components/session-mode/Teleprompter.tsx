@@ -311,7 +311,26 @@ export default function Teleprompter({
 
   if (!current) {
     return (
-      <div className="flex h-app flex-col items-center justify-center gap-2 bg-bg p-8 text-center">
+      <div className="flex h-app flex-col bg-bg">
+        {/*
+         * A way out.
+         *
+         * Aaron: "after the done on a recording when it goes to the put
+         * it back section there is no button to go back into the site at
+         * all". Pressing Done on the last queued script lands here, and
+         * this screen had no menu, because filming deliberately has none,
+         * and no back button, because I only put one on the filming
+         * screen. The only exits were two words inside a paragraph.
+         */}
+        <div className="flex shrink-0 items-center border-b border-border px-3 py-3">
+          <a
+            href="/dashboard"
+            className="flex h-10 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted"
+          >
+            <ArrowLeft size={16} /> Back to Content Studio
+          </a>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-y-auto p-8 text-center">
         <p className="text-lg text-text">Nothing queued.</p>
         {filmed.length > 0 && (
           <div className="w-full max-w-md space-y-2 rounded-xl border border-border bg-panel p-3 text-left">
@@ -336,6 +355,7 @@ export default function Teleprompter({
           </a>{" "}
           and save it to the queue.
         </p>
+        </div>
       </div>
     );
   }

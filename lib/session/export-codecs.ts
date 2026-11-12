@@ -238,6 +238,29 @@ export async function cutFast(
 
     let written = 0; // seconds of finished video laid down so far
 
+    /*
+     * The last timestamp written to each track, so neither ever goes
+     * backwards.
+     *
+     * A cut does not land on a frame boundary. Asked for the stretch from
+     * 7.47 seconds, the decoder hands over the frame that is ON SCREEN at
+     * 7.47, which started a little before it, so its own timestamp is
+     * lower than the start of the range. Mapped straight through, that
+     * frame lands slightly before the end of the previous stretch, and a
+     * muxer will not take a frame that goes back in time:
+     *
+     *   "Timestamps cannot be smaller than the largest timestamp of the
+     *   previous GOP. Got 7.4586666666666667s, but largest is 7.472s"
+     *
+     * which is what Aaron hit, 13 milliseconds of overlap, and the whole
+     * edit refused. So the offset into a stretch is never negative, and
+     * each track is kept strictly moving forward.
+     */
+    let lastVideo = -Infinity;
+    let lastAudio = -Infinity;
+    /** A microsecond: smaller than any frame, big enough to be a step. */
+    const NUDGE = 1e-6;
+
     for (let i = 0; i < parts.length; i++) {
       const input = inputs[i];
       const videoTrack = i === 0 ? firstVideo : await input.getPrimaryVideoTrack();
@@ -255,11 +278,11 @@ export async function cutFast(
         // over does not matter.
         for await (const sample of videoSink.samples(range.start, range.end)) {
           stopIfAsked(options.signal);
-          sample.setTimestamp(written + (sample.timestamp - range.start));
+          let at = written + Math.max(0, sample.timestamp - range.start);
+          if (at <= lastVideo) at = lastVideo + NUDGE;
+          lastVideo = at;
+          sample.setTimestamp(at);
           await videoSource.add(sample);
-          // The sample now carries where it sits in the finished video,
-          // so it is the progress figure already.
-          const at = sample.timestamp;
           sample.close();
           options.onProgress?.({ done: Math.min(1, at / total), seconds: at });
         }
@@ -267,7 +290,10 @@ export async function cutFast(
         if (audioSink && audioSource) {
           for await (const sample of audioSink.samples(range.start, range.end)) {
             stopIfAsked(options.signal);
-            sample.setTimestamp(written + (sample.timestamp - range.start));
+            let at = written + Math.max(0, sample.timestamp - range.start);
+            if (at <= lastAudio) at = lastAudio + NUDGE;
+            lastAudio = at;
+            sample.setTimestamp(at);
             await audioSource.add(sample);
             sample.close();
           }
