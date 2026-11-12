@@ -24,7 +24,7 @@
  * is codec-agnostic, but it does NOT prove H.264 works on a phone. Only a
  * phone proves that.
  */
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -75,6 +75,22 @@ async function makeSource() {
   return new Blob(chunks, { type });
 }
 
+// The file ffmpeg built, when it is there. It has one keyframe in ten
+// seconds, which is the shape a phone produces and the shape that
+// catches cuts landing between frames. Falls back to recording one in
+// the page, which keyframes constantly and catches less.
+async function loadSource() {
+  try {
+    const r = await fetch('./longgop.webm');
+    if (r.ok) {
+      const blob = await r.blob();
+      if (blob.size > 1000) { window.usedFixture = true; return blob; }
+    }
+  } catch {}
+  window.usedFixture = false;
+  return makeSource();
+}
+
 function durationOf(blob) {
   return new Promise((res, rej) => {
     const v = document.createElement('video');
@@ -100,7 +116,7 @@ function durationOf(blob) {
  * to remove. Measure it, cut that, and the check means something.
  */
 window.findBright = async function () {
-  const src = window.src || (window.src = await makeSource());
+  const src = window.src || (window.src = await loadSource());
   const v = document.createElement('video');
   v.src = URL.createObjectURL(src);
   v.muted = true;
@@ -131,7 +147,7 @@ window.chooseRouteSummary = async function () {
 };
 
 window.run = async function (cuts) {
-  const src = window.src || (window.src = await makeSource());
+  const src = window.src || (window.src = await loadSource());
   const format = await T.pickFastFormat(540, 960);
   const t0 = performance.now();
   const res = await T.cutFast([{ source: src, ranges: T.keepRanges(10, cuts) }], { format });
@@ -244,6 +260,38 @@ if (!built) {
 
 writeFileSync(join(dir, "index.html"), PAGE);
 
+/*
+ * A source with one keyframe in the whole clip.
+ *
+ * A browser recording makes keyframes constantly, so every cut lands
+ * near one and nothing goes out of order. A phone does not: Aaron's
+ * sixteen second take refused outright with "Timestamps cannot be
+ * smaller than the largest timestamp of the previous GOP", and a test
+ * built on a browser recording passed against the same broken code.
+ *
+ * ffmpeg builds one here with keyframes switched off, which is the shape
+ * that actually catches it. Dark throughout except seconds three to six,
+ * which are bright, so a bright frame in the result means a cut missed.
+ */
+const fixture = join(dir, "longgop.webm");
+let haveFixture = false;
+try {
+  execFileSync("ffmpeg", [
+    "-v", "error",
+    "-f", "lavfi", "-i", "color=c=0x101010:s=540x960:r=30:d=10",
+    "-f", "lavfi", "-i", "sine=frequency=220:duration=10",
+    "-filter_complex",
+    "[0:v]drawbox=x=0:y=0:w=540:h=960:color=0xf0f0f0:t=fill:enable='between(t,3,6)'[v]",
+    "-map", "[v]", "-map", "1:a",
+    "-c:v", "libvpx-vp9", "-g", "300", "-keyint_min", "300", "-b:v", "1M",
+    "-c:a", "libopus", "-y", fixture,
+  ]);
+  haveFixture = true;
+} catch {
+  // No ffmpeg, or no VP9 encoder. The browser-recorded source still
+  // exercises everything except the sparse keyframe case.
+}
+
 const server = createServer((req, res) => {
   const name = (req.url || "/").split("?")[0].replace(/^\//, "") || "index.html";
   try {
@@ -320,6 +368,40 @@ try {
     control.bright > 0,
     "the check never sees a bright frame, so it proves nothing",
   );
+
+  // Aaron's real edit: sixteen seconds with ten or so silences taken out,
+  // which refused outright with "Timestamps cannot be smaller than the
+  // largest timestamp of the previous GOP". A cut does not land on a
+  // frame boundary, so the first frame of each stretch starts slightly
+  // before the stretch does, and mapped straight through it lands behind
+  // the end of the one before it.
+  console.log("\n  Lots of cuts, none of them on a frame boundary");
+  const many = await page.evaluate(() => run([
+    { start: 0.83, end: 1.37 },
+    { start: 2.11, end: 2.68 },
+    { start: 3.29, end: 4.02 },
+    { start: 5.47, end: 6.13 },
+    { start: 7.06, end: 7.59 },
+    { start: 8.21, end: 8.94 },
+  ]).catch(e => ({ error: String(e && e.message || e) })));
+  check(
+    "six cuts at awkward times do not make it refuse",
+    !many.error,
+    `it gave up with: ${many.error}`,
+  );
+  if (!many.error) {
+    const removed = 0.54 + 0.57 + 0.73 + 0.66 + 0.53 + 0.73;
+    check(
+      "...and the result is as long as it should be",
+      Math.abs(many.seconds - (10 - removed)) < 0.5,
+      `came out ${many.seconds}s, expected about ${(10 - removed).toFixed(2)}s`,
+    );
+    check(
+      "...and still plays evenly",
+      many.longestHold < 0.12,
+      `the longest it holds one frame is ${many.longestHold}s`,
+    );
+  }
 
   console.log("\n  Choosing a route");
   const plan = await page.evaluate(() => chooseRouteSummary());

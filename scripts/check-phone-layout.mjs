@@ -121,6 +121,24 @@ check(
   "it did nothing on his phone and the code already knew why",
 );
 
+console.log("\nEvery screen has a way out");
+
+// Aaron: "after the done on a recording when it goes to the put it back
+// section there is no button to go back into the site at all". Pressing
+// Done on the last queued script lands on the empty screen, and filming
+// deliberately has no menu, so without a button of its own that screen
+// is a dead end.
+const emptyScreen = /if \(!current\) \{[\s\S]*?\n  \}/.exec(prompter)?.[0] ?? "";
+check(
+  "the nothing-queued screen has a labelled way back into the app",
+  /Back to Content Studio/.test(emptyScreen),
+  "filming has no menu, so this screen is a dead end without one",
+);
+check(
+  "...pointing at the app rather than deeper into filming",
+  /href="\/dashboard"/.test(emptyScreen),
+);
+
 console.log("\nA few lines at a time waits for him");
 
 // Aaron: "the single lines automatically push to the next one without me
