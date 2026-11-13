@@ -211,6 +211,45 @@ try {
       .join(", ")}`,
   );
 
+  // 7b. The check above finds tables by their account_id column, so it
+  // would miss a table scoped through some other column. Nothing is
+  // scoped that way today, and this is what notices if something starts
+  // to be, rather than quietly going uncovered.
+  const otherwise = await admin.query(
+    `select distinct c.relname
+       from pg_policy p
+       join pg_class c on c.oid = p.polrelid
+       join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public'
+        and pg_get_expr(p.polqual, p.polrelid) like '%app_current_account%'
+        and not exists (
+          select 1 from pg_attribute a
+           where a.attrelid = c.oid and a.attname = 'account_id'
+             and a.attnum > 0 and not a.attisdropped
+        )`,
+  );
+  check(
+    "no table is account-scoped through a column the check above cannot see",
+    otherwise.rows.length === 0,
+    `scoped another way: ${otherwise.rows.map((r) => r.relname).join(", ")}`,
+  );
+
+  // 7c. Enabled without FORCE is the subtlest wrong state of all: the
+  // table looks protected in every listing and the owner role walks
+  // straight past the policy.
+  const halfOn = await admin.query(
+    `select c.relname from pg_class c
+       join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relkind = 'r'
+        and c.relrowsecurity and not c.relforcerowsecurity
+      order by 1`,
+  );
+  check(
+    "no table has row level security switched on but not forced",
+    halfOn.rows.length === 0,
+    `enabled but not forced: ${halfOn.rows.map((r) => r.relname).join(", ")}`,
+  );
+
   // 8. Login must still work, so accounts itself must NOT be locked.
   const loginable = await withNoAccount("select count(*)::int as n from accounts");
   check("the accounts table is still readable for signing in", loginable[0].n > 0,

@@ -182,6 +182,22 @@ check(
   !/flex flex-col items-center justify-center px-6 text-center/.test(prompter),
 );
 
+console.log("\nTouch targets");
+// The microphone sits next to a text box on nearly every screen in the
+// app, so if it is too small to hit, the whole speak-anywhere feature is
+// too small to hit. It came out 27 pixels tall the first time, which is
+// fiddly with a thumb, and nothing would have caught that going back.
+const mic = readFileSync("components/voice/MicButton.tsx", "utf8");
+check(
+  "the small microphone declares a minimum height, not just padding",
+  /min-h-9/.test(mic),
+  "padding alone gave 27 pixels, which is below a comfortable thumb target",
+);
+check(
+  "...and the ordinary one is a full-size target",
+  /min-h-11/.test(mic),
+);
+
 console.log(
   failures.length === 0
     ? `\nAll ${passed} checks passed.\n`

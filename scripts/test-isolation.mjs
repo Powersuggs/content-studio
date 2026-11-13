@@ -104,6 +104,17 @@ async function makeAccount(label) {
      values ($1, $2, 'instagram', 'manual', 'to contact', $3)`,
     [id, `${marker}lead`.toLowerCase(), `${marker}leadnote`],
   );
+  // A book and a chapter, with the marker in the chapter's prose, so a
+  // leak on the books list or the workspace is caught the same way.
+  const { rows: bk } = await db.query(
+    `insert into books (account_id, title, premise) values ($1, $2, $3) returning id`,
+    [id, `${marker}book`, `${marker}premise`],
+  );
+  await db.query(
+    `insert into book_chapters (account_id, book_id, position, title, summary, body)
+     values ($1, $2, 1, $3, $4, $5)`,
+    [id, bk[0].id, `${marker}chapter`, `${marker}summary`, `${marker}prose and more words`],
+  );
 
   return { id, label, handle, marker, cookie: sessionCookie(id) };
 }
@@ -121,6 +132,7 @@ const PAGES = [
   "/session-prep",
   "/session-mode",
   "/leads",
+  "/books",
 ];
 
 /**
