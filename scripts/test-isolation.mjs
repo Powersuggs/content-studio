@@ -96,6 +96,14 @@ async function makeAccount(label) {
      values ($1, $2, 'src', 'VA')`,
     [id, `${marker}fact`],
   );
+  // The handle has to be lower case to satisfy the table's own constraint,
+  // so the marker is lower-cased here and the page checks are
+  // case-insensitive.
+  await db.query(
+    `insert into leads (account_id, handle, platform, source, status, note)
+     values ($1, $2, 'instagram', 'manual', 'to contact', $3)`,
+    [id, `${marker}lead`.toLowerCase(), `${marker}leadnote`],
+  );
 
   return { id, label, handle, marker, cookie: sessionCookie(id) };
 }
@@ -112,6 +120,7 @@ const PAGES = [
   "/hooks",
   "/session-prep",
   "/session-mode",
+  "/leads",
 ];
 
 /**
@@ -159,13 +168,19 @@ try {
         check(`${path} loaded`, false, String(err?.message ?? err));
         continue;
       }
-      if (html.includes(viewer.marker)) sawOwnDataAnywhere = true;
+      // Compared without case, because a table may force its own column
+      // to lower case (leads.handle does) and a leak that arrives
+      // lower-cased is still a leak.
+      const flat = html.toLowerCase();
+      const has = (needle) => flat.includes(String(needle).toLowerCase());
+
+      if (has(viewer.marker)) sawOwnDataAnywhere = true;
       check(
         `${path} hides ${other.label}'s data`,
-        !html.includes(other.marker),
+        !has(other.marker),
         `found "${other.marker}" in the page`,
       );
-      const leakedFromOwner = owner.filter((s) => html.includes(s));
+      const leakedFromOwner = owner.filter((s) => has(s));
       check(
         `${path} hides the owner's data`,
         leakedFromOwner.length === 0,

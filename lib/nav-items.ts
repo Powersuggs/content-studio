@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  UserPlus,
   LayoutDashboard,
   Stethoscope,
   Sparkles,
@@ -42,6 +43,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/session-mode", label: "Session Mode", icon: Presentation },
   { href: "/boards", label: "Discover Boards", icon: Layers },
   { href: "/inspiration", label: "Inspiration", icon: Compass },
+  { href: "/leads", label: "Leads", icon: UserPlus },
   { href: "/history", label: "History", icon: History },
   { href: "/health", label: "Database check", icon: ShieldCheck },
   { href: "/settings", label: "Sources & Facts", icon: BookMarked },
