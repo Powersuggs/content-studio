@@ -67,7 +67,14 @@ export default function MicButton({
   // that fails when pressed. The field beside it still works.
   if (!voice.supported) return null;
 
-  const pad = size === "sm" ? "px-2 py-1.5 text-[11px]" : "px-2.5 py-2 text-xs";
+  // A minimum height rather than padding alone. The small size came out
+  // 27 pixels tall, which is a fiddly target for a thumb next to a text
+  // box, and this button sits next to a text box on nearly every screen.
+  // 36 is still visually small and is actually hittable.
+  const pad =
+    size === "sm"
+      ? "min-h-9 px-2.5 py-1.5 text-[11px]"
+      : "min-h-11 px-3 py-2 text-xs";
   const icon = size === "sm" ? 13 : 15;
 
   if (voice.state === "recording") {
