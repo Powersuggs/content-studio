@@ -357,13 +357,33 @@ export async function listDraftsForIdeas(
 /** The idea itself, for generating from. Scoped, so it cannot read another account's. */
 export async function getIdeaForGeneration(
   ideaId: number,
-): Promise<{ id: number; title: string; note: string | null } | null> {
+): Promise<{
+  id: number;
+  title: string;
+  note: string | null;
+  transcript: string | null;
+} | null> {
   const accountId = await currentAccountId();
-  const row = await queryOne<{ id: string; title: string; note: string | null }>(
-    `select id, title, note from ideas where id = $1 and account_id = $2`,
+  const row = await queryOne<{
+    id: string;
+    title: string;
+    note: string | null;
+    transcript: string | null;
+  }>(
+    // The transcript is selected because it is the whole point of talking
+    // an idea through rather than typing a line. It was stored and never
+    // read for as long as the column existed.
+    `select id, title, note, transcript from ideas where id = $1 and account_id = $2`,
     [ideaId, accountId],
   );
-  return row ? { id: Number(row.id), title: row.title, note: row.note } : null;
+  return row
+    ? {
+        id: Number(row.id),
+        title: row.title,
+        note: row.note,
+        transcript: row.transcript,
+      }
+    : null;
 }
 
 /**

@@ -44,6 +44,8 @@ const NO_MIC_ON_PURPOSE = {
   "components/inspiration/BulkImportForm.tsx": "a list of web addresses",
   "components/voice/VoiceInterview.tsx":
     "already has a recorder of its own wired to the same box",
+  "components/talk/TalkItOut.tsx":
+    "the recorder IS the page, full width at the top, feeding this same box",
 };
 
 /** Field types with nothing to dictate into. */
