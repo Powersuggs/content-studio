@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import MicButton from "@/components/voice/MicButton";
 import { updateProfileAction } from "@/app/dashboard/actions";
 import type { ProfileHeaderData } from "@/lib/queries";
 
@@ -51,18 +52,25 @@ function EditableText({
       className: `${className ?? ""} w-full rounded-md border border-border bg-panel-2 px-2 py-1 outline-none focus:border-accent`,
     };
     if (multiline) {
+      // The bio: the one field here worth speaking rather than typing.
+      // The mic sits outside the box and does not take focus, so tapping
+      // it does not count as leaving the field, which would save and
+      // close the editor out from under him.
       return (
-        <textarea
-          {...shared}
-          rows={2}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) commit();
-            if (e.key === "Escape") {
-              setDraft(value);
-              setEditing(false);
-            }
-          }}
-        />
+        <div className="flex items-start gap-2">
+          <textarea
+            {...shared}
+            rows={2}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) commit();
+              if (e.key === "Escape") {
+                setDraft(value);
+                setEditing(false);
+              }
+            }}
+          />
+          <MicButton value={draft} onChange={setDraft} label="" size="sm" />
+        </div>
       );
     }
     return (
