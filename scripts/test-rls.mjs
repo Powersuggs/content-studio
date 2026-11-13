@@ -157,17 +157,59 @@ try {
   check("updating another account's rows changes nothing", updated.length === 0,
     `updated ${updated.length} row(s)`);
 
+  // Two tables hold an account_id and are deliberately NOT scoped, because
+  // they are read before there is a session to scope by. The credential in
+  // both cases is the code in the URL, not a cookie. Anything NOT on this
+  // list has to be locked, so a new table is covered the day it is added.
+  const OPEN_ON_PURPOSE = [
+    // Confirming an email address looks the token up before sign-in.
+    "email_verification_tokens",
+    // Meta and the user fetch the deletion status with no cookie (0013).
+    "data_deletion_requests",
+  ];
+
   // 7. FORCE is what makes all of the above true for the owner role.
-  const forced = await db.query(
-    `select count(*)::int as n from pg_class
-      where relrowsecurity and relforcerowsecurity
-        and relname in ('posts','insights','remakes','scripts','boards','board_posts',
-                        'profile','auth','lending_facts','credit_ledger','render_jobs','assets',
-                        'voice_answers','voice_profile','social_handles',
-                        'ideas','idea_outputs','game_plan','newsletters','photos')`,
+  //
+  // The list is asked of the database rather than written here. A table
+  // with an account_id column holds one account's data by definition, so
+  // any such table without FORCE is a leak -- and a hand-written list
+  // would quietly stop covering the newest table, which is the one most
+  // likely to have been got wrong.
+  const unlocked = await admin.query(
+    `select c.relname
+       from pg_class c
+       join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public'
+        and c.relkind = 'r'
+        and exists (
+          select 1 from pg_attribute a
+           where a.attrelid = c.oid and a.attname = 'account_id' and a.attnum > 0
+             and not a.attisdropped
+        )
+        and not (c.relrowsecurity and c.relforcerowsecurity)
+        and c.relname <> all ($1)
+      order by 1`,
+    [OPEN_ON_PURPOSE],
   );
-  check("all 20 tables have FORCE row level security", forced.rows[0].n === 20,
-    `${forced.rows[0].n} of 20 -- without FORCE the owner bypasses every policy`);
+  const owned = await admin.query(
+    `select count(*)::int as n from pg_class c
+       join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relkind = 'r'
+        and exists (
+          select 1 from pg_attribute a
+           where a.attrelid = c.oid and a.attname = 'account_id' and a.attnum > 0
+             and not a.attisdropped
+        )
+        and c.relname <> all ($1)`,
+    [OPEN_ON_PURPOSE],
+  );
+  check(
+    `every table holding account data has FORCE row level security (${owned.rows[0].n} of them)`,
+    unlocked.rows.length === 0,
+    `without FORCE the owner bypasses every policy. Unprotected: ${unlocked.rows
+      .map((r) => r.relname)
+      .join(", ")}`,
+  );
 
   // 8. Login must still work, so accounts itself must NOT be locked.
   const loginable = await withNoAccount("select count(*)::int as n from accounts");
