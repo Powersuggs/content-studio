@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import MicButton from "@/components/voice/MicButton";
 import { ImagePlus, Loader2, Trash2, Check, X, User, Mountain, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { downscale } from "./downscale";
@@ -243,12 +244,15 @@ function PhotoCard({ photo }: { photo: PhotoView }) {
                 </button>
               ))}
             </div>
-            <input
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="What is this photo?"
-              className="w-full rounded-lg border border-border bg-panel-2 px-2 py-1.5 text-[11px] text-text outline-none focus:border-accent"
-            />
+            <div className="flex items-center gap-1.5">
+              <input
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="What is this photo?"
+                className="min-w-0 flex-1 rounded-lg border border-border bg-panel-2 px-2 py-1.5 text-[11px] text-text outline-none focus:border-accent"
+              />
+              <MicButton value={label} onChange={setLabel} label="" size="sm" />
+            </div>
             <input
               value={tags}
               onChange={(e) => setTags(e.target.value)}

@@ -17,6 +17,17 @@ import { useVoiceCapture, formatElapsed } from "./useVoiceCapture";
  * where there is no room for a sentence. Parents that do not care can
  * leave it out and the message is simply not shown.
  */
+/**
+ * Keep the caret where it was.
+ *
+ * A button takes focus when pressed, which pulls it out of the field
+ * beside it. Mostly that is only untidy, but a field that saves when it
+ * loses focus closes itself the moment the mic is tapped, and the
+ * profile bio does exactly that. Preventing the default on mousedown
+ * stops the button taking focus at all; the click still happens.
+ */
+const keepFocus = (e: React.MouseEvent) => e.preventDefault();
+
 export default function MicButton({
   value,
   onChange,
@@ -63,6 +74,7 @@ export default function MicButton({
     return (
       <button
         type="button"
+        onMouseDown={keepFocus}
         onClick={voice.stop}
         title="Stop and write it down"
         className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-warn bg-warn/10 font-medium text-warn ${pad}`}
@@ -87,6 +99,7 @@ export default function MicButton({
   return (
     <button
       type="button"
+      onMouseDown={keepFocus}
       onClick={() => {
         onErrorRef.current?.(null);
         voice.start();

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Sparkles, BookmarkPlus, Check, ChevronDown, ChevronUp } from "lucide-react";
+import MicButton from "@/components/voice/MicButton";
 import {
   saveReferencePostAction,
   type ReferenceBreakdown,
@@ -115,7 +116,10 @@ export default function AddReferenceForm() {
           </div>
 
           <div>
-            <label className="text-xs text-faint">Caption</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-faint">Caption</label>
+              <MicButton value={caption} onChange={setCaption} label="Say it" size="sm" />
+            </div>
             <textarea
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
@@ -126,7 +130,10 @@ export default function AddReferenceForm() {
           </div>
 
           <div>
-            <label className="text-xs text-faint">Transcript (optional, but the breakdown is much sharper with one)</label>
+            <div className="flex items-start justify-between gap-2">
+              <label className="text-xs text-faint">Transcript (optional, but the breakdown is much sharper with one)</label>
+              <MicButton value={transcript} onChange={setTranscript} label="Say it" size="sm" />
+            </div>
             <textarea
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
