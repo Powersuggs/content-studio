@@ -5,7 +5,12 @@ import { getWritingGuardrail, saveScript } from "@/lib/queries";
 import { saveNewsletter } from "@/lib/newsletter/queries";
 import { getIdeaForGeneration, saveDraft } from "@/lib/ideas/queries";
 import { isFormatId, formatLabel } from "@/lib/ideas/formats";
-import { systemPromptFor, maxTokensFor, normalize } from "@/lib/ideas/generate";
+import {
+  systemPromptFor,
+  userPromptFor,
+  maxTokensFor,
+  normalize,
+} from "@/lib/ideas/generate";
 import { explainDbError } from "@/lib/db-errors";
 
 export const maxDuration = 60;
@@ -46,9 +51,7 @@ export async function POST(request: Request) {
     const result = normalize(
       await generateJson({
         system: `${systemPromptFor(format, JSON_ONLY_INSTRUCTION)}\n\n${guardrail}`,
-        user: idea.note
-          ? `The idea:\n${idea.title}\n\nTheir note on it:\n${idea.note}`
-          : `The idea:\n${idea.title}`,
+        user: userPromptFor(idea),
         maxTokens: maxTokensFor(format),
         useVoice: true,
       }),

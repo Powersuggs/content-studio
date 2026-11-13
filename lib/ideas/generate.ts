@@ -217,3 +217,59 @@ export function normalize(raw: unknown, format?: FormatId): GeneratedOutput | nu
   if (r.plan && typeof r.plan === "object") out.plan = r.plan as CarouselPlan;
   return out;
 }
+
+/**
+ * What the model is actually given to write from.
+ *
+ * This exists because `ideas.transcript` was a column nothing read. An
+ * idea captured by talking for two minutes stored every word, and then
+ * the writer was handed only the one-line title, so the piece came back
+ * in no particular voice and all the specifics said out loud were lost.
+ *
+ * The transcript is therefore not extra context, it is the source, and it
+ * is labelled as such. The instructions around it are the ones that
+ * matter: speech is full of phrases a person would never type, and those
+ * phrases are the only reason a transcript beats a summary. A model given
+ * raw speech with no instruction will tidy it into business writing,
+ * which throws away the thing that was worth keeping.
+ *
+ * Pure, and exported, so what reaches the model can be asserted in a test
+ * without a network call.
+ */
+export function userPromptFor(idea: {
+  title: string;
+  note?: string | null;
+  transcript?: string | null;
+}): string {
+  const parts: string[] = [];
+  const transcript = idea.transcript?.trim();
+
+  if (transcript) {
+    parts.push(
+      `THEY TALKED THIS THROUGH OUT LOUD. The transcript is below, and it is the source for this piece.
+
+HOW TO USE IT
+- Their phrasing is the point. Where they said something in a way you would not have written, keep their way.
+- Every specific in here is real: a number, a name, a thing that happened to them, an objection they have actually been given. Use those. Do not swap a real specific for a general one.
+- It is speech, so it wanders, repeats and restarts. Cut all of that. Keep the thinking.
+- Do not quote the stumbles. "Um", a doubled word or a self-correction belongs in the record of how they speak, not in the finished piece.
+- If they changed their mind partway through, the later version is what they think.
+- Do not add a claim, a statistic or a story that is not in here. If the piece needs something they did not say, say so in notes rather than inventing it.
+
+TRANSCRIPT
+${transcript}`,
+    );
+    // The title is secondary once there is a transcript: it was very
+    // likely derived from the transcript in the first place, so leading
+    // with it would have the model write to the summary instead of the
+    // substance.
+    parts.push(`WHAT THEY CALLED IT\n${idea.title}`);
+  } else {
+    parts.push(`THE IDEA\n${idea.title}`);
+  }
+
+  const note = idea.note?.trim();
+  if (note) parts.push(`${transcript ? "THEIR NOTE ON IT" : "Their note on it"}\n${note}`);
+
+  return parts.join("\n\n");
+}
