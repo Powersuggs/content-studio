@@ -197,6 +197,20 @@ try {
     /A few words strung together/.test(form),
   );
   check(
+    "every password box can be shown",
+    (form.match(/aria-label="Show password"/g) ?? []).length >= 2,
+    "signup has two: the password and the confirm. Typing a long one blind on a phone is how people lock themselves out",
+  );
+  check(
+    "...and starts hidden",
+    !/type="text"[^>]*name="password"/.test(form),
+    "a password box that starts visible is one he does not notice before someone else does",
+  );
+  check(
+    "the toggle cannot submit the form by accident",
+    /aria-label="Show password"/.test(form) && /type="button"/.test(form),
+  );
+  check(
     "it says the code's dashes and capitals do not matter",
     /Dashes and capitals do not matter/.test(form),
     "the code is tidied before it is checked, and saying so saves people retyping one that would have worked",
@@ -221,7 +235,14 @@ try {
     shared.location.includes("/login"),
     `${shared.location} -- the old shared-password door must be shut`,
   );
-  const loginHtml = await (await fetch(`${BASE_URL}/login`)).text();
+  const loginHtml = (await (await fetch(`${BASE_URL}/login`)).text())
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\s+/g, " ");
+  check(
+    "the login password box can be shown too",
+    /aria-label="Show password"/.test(loginHtml),
+    "this is the box people actually get stuck on",
+  );
   check(
     "the login page no longer tells people to leave the email blank",
     !/leave the email blank/i.test(loginHtml),

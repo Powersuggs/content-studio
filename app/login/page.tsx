@@ -1,3 +1,5 @@
+import PasswordField from "@/components/auth/PasswordField";
+
 const ERRORS: Record<string, string> = {
   "1": "That email and password didn't work.",
   suspended: "That account is suspended.",
@@ -38,13 +40,7 @@ export default async function LoginPage({
 
         <label className="block space-y-1">
           <span className="text-xs text-muted">Password</span>
-          <input
-            type="password"
-            name="password"
-            required
-            autoComplete="current-password"
-            className="w-full rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
-          />
+          <PasswordField name="password" required autoComplete="current-password" />
         </label>
 
         {params.error && (

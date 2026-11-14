@@ -35,7 +35,7 @@ const NO_MIC_ON_PURPOSE = {
   "components/settings/SocialHandles.tsx":
     "a handle, which has to be exactly right and is nine characters",
   "components/settings/InviteCodes.tsx": "switches and buttons, no prose",
-  "components/settings/MyPassword.tsx":
+  "components/auth/PasswordField.tsx":
     "a password, which nobody should say out loud, and dictation gets close rather than exact",
   "components/game-plan/GamePlanForm.tsx": "dates and numbers",
   "components/ideas/SlideStudio.tsx":
