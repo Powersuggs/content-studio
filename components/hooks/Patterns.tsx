@@ -8,7 +8,7 @@ import {
   deletePatternAction,
   setPatternActiveAction,
 } from "@/app/hooks/actions";
-import type { HookPattern } from "@/lib/hooks/patterns";
+import { APPLIES_TO, APPLIES_LABEL, type AppliesTo, type HookPattern } from "@/lib/hooks/render";
 
 /**
  * What he has learned from creators he studies.
@@ -24,10 +24,14 @@ export default function Patterns({ patterns }: { patterns: HookPattern[] }) {
   const [source, setSource] = useState("");
   const [what, setWhat] = useState("");
   const [example, setExample] = useState("");
+  const [appliesTo, setAppliesTo] = useState<AppliesTo>("hook");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  const live = patterns.filter((p) => p.active).length;
+  // Only the spoken-hook ones are what Hook Lab uses, so that is the
+  // number worth showing beside its own heading. The rest are real and
+  // kept, they are simply waiting for the tool that will read them.
+  const live = patterns.filter((p) => p.active && p.applies_to === "hook").length;
 
   return (
     <div className="space-y-3 rounded-xl border border-border bg-panel p-3">
@@ -37,13 +41,14 @@ export default function Patterns({ patterns }: { patterns: HookPattern[] }) {
           Patterns you have studied
         </h2>
         <span className="text-xs text-faint">
-          {live > 0 ? `${live} in use` : "none yet"}
+          {live > 0 ? `${live} used by Hook Lab` : "none for hooks yet"}
         </span>
       </div>
       <p className="text-sm text-muted">
-        When you pull apart someone whose hooks work, write down what they
-        actually do here. Hook Lab uses these on top of its own eight, and
-        they win where the two disagree.
+        When you pull apart someone whose work lands, write down what they
+        actually do here. Hook Lab reads the spoken hook ones on top of its
+        own eight, and they win where the two disagree. Title and thumbnail
+        notes are kept for the tools that will read them.
       </p>
 
       {error && (
@@ -67,9 +72,11 @@ export default function Patterns({ patterns }: { patterns: HookPattern[] }) {
                   <span className={`text-sm ${p.active ? "text-text" : "text-faint"}`}>
                     {p.name}
                   </span>
-                  {p.source && (
-                    <span className="text-xs text-faint"> from {p.source}</span>
-                  )}
+                  <span className="text-xs text-faint">
+                    {" "}
+                    {APPLIES_LABEL[p.applies_to]}
+                    {p.source && ` from ${p.source}`}
+                  </span>
                   <span className="mt-0.5 block text-xs text-muted">{p.what_it_does}</span>
                   {p.example && (
                     <span className="mt-0.5 block text-xs italic text-faint">{p.example}</span>
@@ -106,6 +113,25 @@ export default function Patterns({ patterns }: { patterns: HookPattern[] }) {
 
       {open ? (
         <div className="space-y-2 rounded-lg border border-border bg-panel-2 p-2.5">
+          {/* Asked first, because it changes what the rest of the form
+              is even about. A thumbnail note and a spoken-hook note are
+              different crafts. */}
+          <div className="flex flex-wrap gap-1.5">
+            {APPLIES_TO.map((w) => (
+              <button
+                key={w}
+                type="button"
+                onClick={() => setAppliesTo(w)}
+                className={`h-9 rounded-lg border px-3 text-xs ${
+                  appliesTo === w
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border text-muted"
+                }`}
+              >
+                {APPLIES_LABEL[w]}
+              </button>
+            ))}
+          </div>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -142,11 +168,12 @@ export default function Patterns({ patterns }: { patterns: HookPattern[] }) {
                 start(async () => {
                   setError(null);
                   try {
-                    await addPatternAction({ name, source, whatItDoes: what, example });
+                    await addPatternAction({ name, source, whatItDoes: what, example, appliesTo });
                     setName("");
                     setSource("");
                     setWhat("");
                     setExample("");
+                    setAppliesTo("hook");
                     setOpen(false);
                   } catch (e) {
                     setError(e instanceof Error ? e.message : "That did not save.");

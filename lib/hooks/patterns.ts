@@ -1,9 +1,11 @@
 import { query, queryOne } from "@/lib/db";
 import { currentAccountId } from "@/lib/auth/current-account";
-import type { HookPattern } from "./render";
+import { APPLIES_LABEL } from "./render";
+import type { AppliesTo, HookPattern } from "./render";
 
-export type { HookPattern } from "./render";
-export { renderPatterns } from "./render";
+export type { AppliesTo, HookPattern } from "./render";
+export { renderPatterns, APPLIES_TO } from "./render";
+export { APPLIES_LABEL };
 
 /**
  * Patterns he has taken from creators he studies.
@@ -18,10 +20,10 @@ export { renderPatterns } from "./render";
 export async function listPatterns(): Promise<HookPattern[]> {
   const account = await currentAccountId();
   return query<HookPattern>(
-    `select id, name, source, what_it_does, example, active
+    `select id, name, source, what_it_does, example, active, applies_to
        from hook_patterns
       where account_id = $1
-      order by active desc, created_at desc`,
+      order by applies_to, active desc, created_at desc`,
     [account],
   );
 }
@@ -31,6 +33,7 @@ export async function addPattern(input: {
   source?: string | null;
   whatItDoes: string;
   example?: string | null;
+  appliesTo?: AppliesTo;
 }): Promise<number> {
   const account = await currentAccountId();
   const name = input.name.trim();
@@ -40,14 +43,15 @@ export async function addPattern(input: {
 
   try {
     const row = await queryOne<{ id: string }>(
-      `insert into hook_patterns (account_id, name, source, what_it_does, example)
-       values ($1, $2, $3, $4, $5) returning id`,
+      `insert into hook_patterns (account_id, name, source, what_it_does, example, applies_to)
+       values ($1, $2, $3, $4, $5, $6) returning id`,
       [
         account,
         name.slice(0, 120),
         input.source?.trim() || null,
         what.slice(0, 1000),
         input.example?.trim()?.slice(0, 500) || null,
+        input.appliesTo ?? "hook",
       ],
     );
     return Number(row!.id);
@@ -56,7 +60,9 @@ export async function addPattern(input: {
     // used to be possible and quietly doubled its weight in the prompt.
     // The database's own message for that is not something to show him.
     if (err && typeof err === "object" && (err as { code?: string }).code === "23505") {
-      throw new Error(`You already have a pattern called "${name}".`);
+      throw new Error(
+        `You already have a ${APPLIES_LABEL[input.appliesTo ?? "hook"].toLowerCase()} pattern called "${name}".`,
+      );
     }
     throw err;
   }
