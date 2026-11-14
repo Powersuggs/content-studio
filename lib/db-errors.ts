@@ -32,6 +32,7 @@ export const MIGRATION_FOR_TABLE: Record<string, string> = {
   data_deletion_requests: "0013_instagram_oauth.sql",
   email_verification_tokens: "0009_accounts.sql",
   game_plan: "0017_game_plan.sql",
+  hook_patterns: "0027_hook_patterns.sql",
   idea_outputs: "0016_ideas.sql",
   ideas: "0016_ideas.sql",
   insights: "0001_init.sql",
@@ -55,7 +56,7 @@ export const MIGRATION_FOR_TABLE: Record<string, string> = {
  * that is the one almost certainly not yet run. Asserted against the
  * migrations directory by scripts/check-migration-map.mjs.
  */
-export const LATEST_MIGRATION = "0026_books.sql";
+export const LATEST_MIGRATION = "0027_hook_patterns.sql";
 
 /** Thrown by requireMyHandle when no Instagram handle is set yet. */
 const NO_HANDLE = "NO_HANDLE";

@@ -3,6 +3,7 @@ import { generateJson } from "@/lib/ai/generate-json";
 import { SIGNAL_READING_GUIDE, JSON_ONLY_INSTRUCTION } from "@/lib/ai/signals";
 import { getWritingGuardrail } from "@/lib/queries";
 import { explainDbError } from "@/lib/db-errors";
+import { listPatterns, renderPatterns } from "@/lib/hooks/patterns";
 
 const ARCHETYPES = [
   "identity anchor",
@@ -72,8 +73,13 @@ export async function POST(request: Request) {
     }
 
     const guardrail = await getWritingGuardrail();
+    // His own studied patterns go in AFTER the built-in archetypes, and
+    // say so themselves, so that where the two disagree the thing he
+    // learned from a creator he actually watches wins.
+    const studied = renderPatterns(await listPatterns().catch(() => []));
+
     const result = await generateJson<HooksResponse>({
-      system: `${BASE_SYSTEM_PROMPT}\n\n${guardrail}`,
+      system: [BASE_SYSTEM_PROMPT, studied, guardrail].filter(Boolean).join("\n\n"),
       user: `Topic: ${topic}`,
       // 8 short lines is a small payload, but keep generous headroom for
       // the model's internal thinking pass.
