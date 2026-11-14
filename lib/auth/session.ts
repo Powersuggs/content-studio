@@ -6,13 +6,6 @@ export const OWNER_ACCOUNT_ID = 1;
 
 export type Session = {
   accountId: number;
-  /**
-   * True for a pre-accounts cookie: proof someone knew APP_PASSWORD, but not
-   * proof of WHO they are. Middleware sends these to /setup so the owner can
-   * claim the account with a real email and password. Remove this path once
-   * APP_PASSWORD is retired.
-   */
-  legacy: boolean;
 };
 
 async function getKey(): Promise<CryptoKey> {
@@ -64,18 +57,6 @@ export async function createSessionToken(accountId: number): Promise<string> {
 }
 
 /**
- * Issue a session in the pre-accounts shape: authenticated, but not tied to a
- * named person. Middleware routes these to /setup. Used only when someone
- * signs in with the shared APP_PASSWORD on an owner account that has not been
- * claimed yet, so that path always lands on the claim screen rather than
- * quietly handing out an owner session.
- */
-export async function createUnclaimedSessionToken(): Promise<string> {
-  const expires = Date.now() + SESSION_DURATION_MS;
-  return `${expires}.${await sign(String(expires))}`;
-}
-
-/**
  * Verify a session token and return who it belongs to, or null.
  *
  * Runs inside Edge middleware, so Web Crypto only -- no node:crypto here.
@@ -95,21 +76,13 @@ export async function verifySessionToken(token: string | undefined): Promise<Ses
     if (!Number.isFinite(expires) || Date.now() > expires) return null;
     const expected = await sign(`v2.${accountId}.${expires}`);
     if (!timingSafeEqual(expected, signature)) return null;
-    return { accountId, legacy: false };
+    return { accountId };
   }
 
-  // Pre-accounts format: <expires>.<signature>. Still valid (it required the
-  // shared password), but anonymous, so it is treated as the owner and sent
-  // to /setup rather than straight into the app.
-  if (parts.length === 2) {
-    const [expiresStr, signature] = parts;
-    const expires = Number(expiresStr);
-    if (!expiresStr || !signature) return null;
-    if (!Number.isFinite(expires) || Date.now() > expires) return null;
-    const expected = await sign(expiresStr);
-    if (!timingSafeEqual(expected, signature)) return null;
-    return { accountId: OWNER_ACCOUNT_ID, legacy: true };
-  }
-
+  // The pre-accounts cookie shape, <expires>.<signature>, is no longer
+  // accepted. It carried no account id and stood for "knew the shared
+  // password", which is not a thing any more. Those cookies lasted 30 days
+  // and the shared password was retired well over that ago, so there is
+  // nothing live to break. Anyone holding one signs in again.
   return null;
 }
