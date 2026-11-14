@@ -414,6 +414,7 @@ function sourceLabel(source: string): string {
   if (source === "capture") return "Captured";
   if (source === "suggested") return "Suggested from your posts";
   if (source === "talk") return "Talked through";
+  if (source === "news") return "From the news";
   return source;
 }
 
