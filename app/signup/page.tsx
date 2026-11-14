@@ -1,4 +1,5 @@
 import Link from "next/link";
+import PasswordField from "@/components/auth/PasswordField";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/password";
 
 export const metadata = {
@@ -73,12 +74,7 @@ export default async function SignupPage({
 
         <label className="block space-y-1">
           <span className="text-xs text-muted">Password</span>
-          <input
-            type="password"
-            name="password"
-            autoComplete="new-password"
-            className="w-full rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
-          />
+          <PasswordField name="password" autoComplete="new-password" />
           {/*
             Says what helps rather than what is forbidden. Nothing here
             is a restriction: every character is accepted, because the
@@ -100,12 +96,7 @@ export default async function SignupPage({
 
         <label className="block space-y-1">
           <span className="text-xs text-muted">Confirm password</span>
-          <input
-            type="password"
-            name="confirm"
-            autoComplete="new-password"
-            className="w-full rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
-          />
+          <PasswordField name="confirm" autoComplete="new-password" />
         </label>
 
         {params.error && (

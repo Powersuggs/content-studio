@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { KeyRound, Check, AlertCircle } from "lucide-react";
+import PasswordField from "@/components/auth/PasswordField";
 import { changeMyPasswordAction } from "@/app/settings/actions";
 
 /**
@@ -68,29 +69,23 @@ export default function MyPassword() {
   return (
     <div className="space-y-2 rounded-xl border border-border bg-panel p-3">
       <p className="text-sm font-semibold text-text">Change my password</p>
-      <input
-        type="password"
+      <PasswordField
         autoComplete="current-password"
         value={current}
-        onChange={(e) => setCurrent(e.target.value)}
+        onChange={setCurrent}
         placeholder="Current password"
-        className="w-full rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
       />
-      <input
-        type="password"
+      <PasswordField
         autoComplete="new-password"
         value={next}
-        onChange={(e) => setNext(e.target.value)}
+        onChange={setNext}
         placeholder="New password"
-        className="w-full rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
       />
-      <input
-        type="password"
+      <PasswordField
         autoComplete="new-password"
         value={confirm}
-        onChange={(e) => setConfirm(e.target.value)}
+        onChange={setConfirm}
         placeholder="New password again"
-        className="w-full rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
       />
       <p className="text-[11px] text-faint">
         At least 10 characters. Any letters, numbers or symbols.
