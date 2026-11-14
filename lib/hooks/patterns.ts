@@ -38,18 +38,28 @@ export async function addPattern(input: {
   if (!name) throw new Error("A pattern needs a name.");
   if (!what) throw new Error("Say what the pattern actually does, or it will not change anything.");
 
-  const row = await queryOne<{ id: string }>(
-    `insert into hook_patterns (account_id, name, source, what_it_does, example)
-     values ($1, $2, $3, $4, $5) returning id`,
-    [
-      account,
-      name.slice(0, 120),
-      input.source?.trim() || null,
-      what.slice(0, 1000),
-      input.example?.trim()?.slice(0, 500) || null,
-    ],
-  );
-  return Number(row!.id);
+  try {
+    const row = await queryOne<{ id: string }>(
+      `insert into hook_patterns (account_id, name, source, what_it_does, example)
+       values ($1, $2, $3, $4, $5) returning id`,
+      [
+        account,
+        name.slice(0, 120),
+        input.source?.trim() || null,
+        what.slice(0, 1000),
+        input.example?.trim()?.slice(0, 500) || null,
+      ],
+    );
+    return Number(row!.id);
+  } catch (err) {
+    // A unique index stops the same pattern being added twice, which
+    // used to be possible and quietly doubled its weight in the prompt.
+    // The database's own message for that is not something to show him.
+    if (err && typeof err === "object" && (err as { code?: string }).code === "23505") {
+      throw new Error(`You already have a pattern called "${name}".`);
+    }
+    throw err;
+  }
 }
 
 export async function setPatternActive(id: number, active: boolean): Promise<void> {

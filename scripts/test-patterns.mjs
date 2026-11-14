@@ -159,6 +159,47 @@ if (!existsSync(`${PG}/initdb`) || spawnSync("id", ["claude"]).status !== 0) {
 
     const active = psql(`select active from hook_patterns where name = 'ok'`).trim();
     check("a new pattern starts switched on", active === "t", active);
+
+    // 0028: the seed insert was run twice and silently doubled every
+    // pattern, which reads as eight patterns when there are four and
+    // doubles their weight in the prompt.
+    psql(`insert into hook_patterns (account_id, name, what_it_does)
+          values (1, 'dupe', 'a'), (1, 'dupe', 'a'), (1, 'DUPE', 'a')`);
+    const before = Number(psql(`select count(*) from hook_patterns where lower(name) = 'dupe'`).trim());
+    check("duplicates could be created before the fix", before === 3, String(before));
+
+    psql(readFileSync(join(ROOT, "migrations/0028_hook_patterns_unique.sql"), "utf8"));
+    const after = Number(psql(`select count(*) from hook_patterns where lower(name) = 'dupe'`).trim());
+    check("the repair leaves exactly one of each", after === 1, String(after));
+    check(
+      "...and it keeps the oldest rather than a random one",
+      psql(`select name from hook_patterns where lower(name) = 'dupe'`).trim() === "dupe",
+    );
+
+    let blocked = false;
+    try { psql(`insert into hook_patterns (account_id, name, what_it_does) values (1, 'dupe', 'a')`); }
+    catch { blocked = true; }
+    check("adding the same name again is refused afterwards", blocked);
+
+    let caseBlocked = false;
+    try { psql(`insert into hook_patterns (account_id, name, what_it_does) values (1, 'DuPe', 'a')`); }
+    catch { caseBlocked = true; }
+    check(
+      "...including the same name typed with different capitals",
+      caseBlocked,
+      "'Away from pain' and 'away from pain' are one pattern typed twice",
+    );
+
+    psql(readFileSync(join(ROOT, "migrations/0028_hook_patterns_unique.sql"), "utf8"));
+    check("the repair can be run twice", true);
+
+    const other = psql(`insert into hook_patterns (account_id, name, what_it_does)
+                        values (2, 'dupe', 'a') returning id`).trim();
+    check(
+      "another account may use the same pattern name",
+      other !== "",
+      "the index is per account, not global",
+    );
   } finally {
     try { asClaude(`${PG}/pg_ctl -D ${base}/data stop -m immediate`); } catch {}
     try { rmSync(base, { recursive: true, force: true }); } catch {}
