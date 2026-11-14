@@ -16,8 +16,8 @@ export const metadata = {
 const ERRORS: Record<string, string> = {
   code: "That invite code is not valid, has already been used, or has expired.",
   email: "That does not look like an email address.",
-  short: `Your password needs to be at least ${MIN_PASSWORD_LENGTH} characters.`,
-  mismatch: "The two passwords do not match.",
+  short: `Your password needs to be at least ${MIN_PASSWORD_LENGTH} characters. Try a few words strung together.`,
+  mismatch: "The two passwords do not match. Check for a typo in the second box.",
   taken: "There is already an account with that email. Sign in instead.",
   failed: "Something went wrong creating the account. Your code was not used up. Try again.",
 };
@@ -54,6 +54,11 @@ export default async function SignupPage({
             placeholder="XXXX-XXXX-XXXX-XXXX"
             className="w-full rounded-lg border border-border bg-panel-2 px-3 py-2 font-mono text-sm uppercase text-text outline-none placeholder:text-faint focus:border-accent"
           />
+          {/* The code is tidied up before it is checked, so saying so
+              here saves people retyping one that would have worked. */}
+          <span className="block text-[11px] text-faint">
+            From the person who invited you. Dashes and capitals do not matter.
+          </span>
         </label>
 
         <label className="block space-y-1">
@@ -74,8 +79,22 @@ export default async function SignupPage({
             autoComplete="new-password"
             className="w-full rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
           />
+          {/*
+            Says what helps rather than what is forbidden. Nothing here
+            is a restriction: every character is accepted, because the
+            password is scrambled before it is stored and the app never
+            passes it anywhere that could choke on a symbol. A rule like
+            "no special characters" would only make people's passwords
+            weaker, which is why there isn't one.
+
+            Length is the thing that actually matters, so that is what
+            the hint pushes, with an example of the shape to aim for.
+          */}
           <span className="block text-[11px] text-faint">
-            At least {MIN_PASSWORD_LENGTH} characters.
+            At least {MIN_PASSWORD_LENGTH} characters. Any letters, numbers or
+            symbols. A few words strung together, like
+            {" "}<span className="text-muted">coffee boat tuesday</span>, beats
+            a short one with symbols in it.
           </span>
         </label>
 

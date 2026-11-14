@@ -4,12 +4,13 @@ import DeleteFactButton from "@/components/settings/DeleteFactButton";
 import InstagramConnection from "@/components/settings/InstagramConnection";
 import SocialHandles from "@/components/settings/SocialHandles";
 import InviteCodes from "@/components/settings/InviteCodes";
+import People from "@/components/settings/People";
+import MyPassword from "@/components/settings/MyPassword";
 import SetupNotice from "@/components/SetupNotice";
 import { safeLoad } from "@/lib/db-errors";
 import { listHandles } from "@/lib/social/handles";
 import { listInvites } from "@/lib/auth/invites";
-import { getSession } from "@/lib/auth/current-account";
-import { OWNER_ACCOUNT_ID } from "@/lib/auth/session";
+import { isOwner, listPeople } from "@/lib/auth/people";
 
 /**
  * Messages the Instagram OAuth routes hand back in the query string. They
@@ -76,14 +77,19 @@ export default async function SettingsPage({
 
   // Invites are the owner's to issue. A member never sees the panel, and the
   // actions behind it re-check rather than trusting that.
-  const session = await getSession();
-  const isOwner = session?.accountId === OWNER_ACCOUNT_ID;
+  // Owner is a role, not an id. Comparing against account 1 held while
+  // every install started from the migrations, and stops holding the
+  // moment one starts from a signup instead.
+  const owner = await isOwner();
   const [socialHandles, handlesError] = await safeLoad(
     () => listHandles(),
     [] as Awaited<ReturnType<typeof listHandles>>,
     "settings",
   );
-  const [invites, invitesError] = isOwner
+  const [people] = owner
+    ? await safeLoad(() => listPeople(), [] as Awaited<ReturnType<typeof listPeople>>, "settings")
+    : [[] as Awaited<ReturnType<typeof listPeople>>, null as string | null];
+  const [invites, invitesError] = owner
     ? await safeLoad(() => listInvites(), [] as Awaited<ReturnType<typeof listInvites>>, "settings")
     : [[] as Awaited<ReturnType<typeof listInvites>>, null as string | null];
   const setupError = factsError ?? handlesError ?? invitesError;
@@ -124,7 +130,11 @@ export default async function SettingsPage({
 
       <SocialHandles initial={socialHandles} />
 
-      {isOwner && <InviteCodes initial={invites} />}
+      {owner && <InviteCodes initial={invites} />}
+
+      {owner && <People people={people} />}
+
+      <MyPassword />
 
       {!factsError && <AddFactForm topicSuggestions={topicSuggestions} />}
 
