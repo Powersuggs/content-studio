@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  createSessionToken,
-  createUnclaimedSessionToken,
-  OWNER_ACCOUNT_ID,
-} from "@/lib/auth/session";
+import { createSessionToken } from "@/lib/auth/session";
 import { verifyPassword } from "@/lib/auth/password";
 import { queryOne } from "@/lib/db";
 
@@ -43,14 +39,20 @@ export async function POST(request: Request) {
   // though this value came from our own hidden field.
   const next = rawNext.startsWith("/") ? rawNext : "/dashboard";
 
+  // Everyone signs in as themselves now. The shared APP_PASSWORD fallback
+  // that used to live here is gone: it only ever worked on an owner
+  // account with no password of its own, so it had already retired itself,
+  // and leaving it in meant a second way in that nobody was watching.
   let accountId: number | null = null;
-  let unclaimed = false;
 
   if (email) {
     const account = await queryOne<AccountRow>(
       "select id, password_hash, status from accounts where lower(email) = $1",
       [email],
     );
+    // Verified against a dummy hash when there is no such account, so a
+    // wrong email and a wrong password take the same time to fail and the
+    // form cannot be used to find out which emails exist.
     const ok = await verifyPassword(password, account?.password_hash ?? DUMMY_HASH);
     if (account && ok) {
       if (account.status !== "active") {
@@ -58,32 +60,13 @@ export async function POST(request: Request) {
       }
       accountId = account.id;
     }
-  } else {
-    // Pre-accounts fallback. This is what makes the first login after the
-    // change possible, and it retires itself: once the owner has set a
-    // password of their own, the shared password stops working entirely.
-    const shared = process.env.APP_PASSWORD;
-    if (shared && password === shared) {
-      const owner = await queryOne<AccountRow>(
-        "select id, password_hash, status from accounts where id = $1",
-        [OWNER_ACCOUNT_ID],
-      );
-      if (owner && !owner.password_hash) {
-        accountId = owner.id;
-        unclaimed = true;
-      }
-    }
   }
 
   if (accountId === null) {
     return redirectToLogin(request, next, "1");
   }
 
-  // An unclaimed session is authenticated but anonymous, so middleware sends
-  // it to /setup rather than into the app.
-  const token = unclaimed
-    ? await createUnclaimedSessionToken()
-    : await createSessionToken(accountId);
+  const token = await createSessionToken(accountId);
   const response = NextResponse.redirect(new URL(next, request.url), { status: 303 });
   response.cookies.set("session", token, {
     httpOnly: true,

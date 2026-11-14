@@ -31,7 +31,6 @@ import { join } from "node:path";
  */
 const NO_MIC_ON_PURPOSE = {
   "app/login/page.tsx": "an email and a password",
-  "app/setup/page.tsx": "an email and a password",
   "app/signup/page.tsx": "an email and a password",
   "components/settings/SocialHandles.tsx":
     "a handle, which has to be exactly right and is nine characters",

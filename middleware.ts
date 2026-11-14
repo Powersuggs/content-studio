@@ -18,6 +18,10 @@ import { verifySessionToken } from "@/lib/auth/session";
 const PUBLIC_PATHS = [
   "/login",
   "/api/login",
+  // Signing up has to work for someone who has no account yet, which is
+  // the entire point of an invite code.
+  "/signup",
+  "/api/signup",
   "/api/sync/cron",
   "/api/instagram/callback",
   "/api/instagram/deauthorize",
@@ -31,12 +35,34 @@ const PUBLIC_PATHS = [
 // Signing out has to work from any state, including a stale cookie.
 const ALWAYS_ALLOWED = ["/api/logout"];
 
-// Signup and the old claim screen are gone. Anyone landing on them gets the
-// login page rather than a 404, which is the useful answer.
-const RETIRED_PATHS = ["/signup", "/api/signup", "/setup", "/api/setup"];
+// The old claim screen is gone, along with the shared password it existed
+// to retire. Its files are deleted, so these paths are listed here to send
+// anyone who still has the link to the login page rather than a 404.
+//
+// Signup is NOT on this list any more. It was, which meant the Create code
+// button in Settings produced codes that could not be redeemed: whoever
+// was sent one landed on the login screen with no way to make an account.
+const RETIRED_PATHS = ["/setup", "/api/setup"];
 
 function matches(pathname: string, paths: string[]): boolean {
   return paths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+/**
+ * A path cannot be both open to everyone and retired.
+ *
+ * PUBLIC_PATHS is checked first, so a path in both lists is silently
+ * public and the retirement does nothing. That is not a theoretical
+ * tidiness problem: signup sat in the retired list while invite codes
+ * were being handed out, and the only symptom was invited people never
+ * appearing. Crossing the lists is now a mistake that shows up at once
+ * rather than months later.
+ */
+const CONTRADICTORY = PUBLIC_PATHS.filter((p) => RETIRED_PATHS.includes(p));
+if (CONTRADICTORY.length > 0) {
+  throw new Error(
+    `middleware: ${CONTRADICTORY.join(", ")} is both public and retired. Pick one.`,
+  );
 }
 
 export async function middleware(request: NextRequest) {

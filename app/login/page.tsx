@@ -29,6 +29,7 @@ export default async function LoginPage({
           <input
             type="email"
             name="email"
+            required
             autoFocus
             autoComplete="username"
             className="w-full rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
@@ -40,6 +41,7 @@ export default async function LoginPage({
           <input
             type="password"
             name="password"
+            required
             autoComplete="current-password"
             className="w-full rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
           />
@@ -58,10 +60,16 @@ export default async function LoginPage({
           Sign in
         </button>
 
+        {/* Someone handed an invite code arrives here first, because the
+            code is useless without being told where it goes. */}
         <p className="text-xs text-muted">
-          First time since the update? Leave the email blank and enter the old shared
-          password to claim your account.
+          Been given an invite code?{" "}
+          <a href="/signup" className="text-accent">
+            Make your account
+          </a>
+          .
         </p>
+
       </form>
     </div>
   );
