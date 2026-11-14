@@ -7,6 +7,17 @@
  * that only wants to check what reaches the model should not have to
  * drag a request context in to do it.
  */
+/** Where a pattern applies. Spoken hooks are what Hook Lab writes. */
+export const APPLIES_TO = ["hook", "title", "thumbnail", "caption"] as const;
+export type AppliesTo = (typeof APPLIES_TO)[number];
+
+export const APPLIES_LABEL: Record<AppliesTo, string> = {
+  hook: "Spoken hook",
+  title: "Title",
+  thumbnail: "Thumbnail text",
+  caption: "Caption",
+};
+
 export interface HookPattern {
   id: number;
   name: string;
@@ -14,6 +25,7 @@ export interface HookPattern {
   what_it_does: string;
   example: string | null;
   active: boolean;
+  applies_to: AppliesTo;
 }
 
 /**
@@ -26,8 +38,15 @@ export interface HookPattern {
  * Pure apart from the read, and exported, so what reaches the model can
  * be asserted in a test.
  */
-export function renderPatterns(patterns: HookPattern[]): string {
-  const live = patterns.filter((p) => p.active);
+export function renderPatterns(
+  patterns: HookPattern[],
+  appliesTo: AppliesTo = "hook",
+): string {
+  // Filtered by where it applies, not just by whether it is on. A
+  // thumbnail note handed to the spoken-hook writer does not sit there
+  // harmlessly: the model tries to honour it, and the hook comes out
+  // worse while the page still looks like the feature is working.
+  const live = patterns.filter((p) => p.active && p.applies_to === appliesTo);
   if (live.length === 0) return "";
 
   const lines = live.map((p) => {

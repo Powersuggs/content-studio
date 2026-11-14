@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { addPattern, deletePattern, setPatternActive } from "@/lib/hooks/patterns";
+import type { AppliesTo } from "@/lib/hooks/render";
 
 export async function addPatternAction(input: {
   name: string;
   source?: string;
   whatItDoes: string;
   example?: string;
+  appliesTo?: AppliesTo;
 }): Promise<void> {
   await addPattern(input);
   revalidatePath("/hooks");

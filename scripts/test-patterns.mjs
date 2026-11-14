@@ -54,6 +54,7 @@ console.log("\nWhat the model is told\n");
 
 const ONE = [{
   id: 1, name: "Away from pain", source: "Myron Golden", active: true,
+  applies_to: "hook",
   what_it_does: "Open on the mistake the viewer is already making, not the result they want.",
   example: "7 biggest mistakes that destroy your chances, not 7 steps to success",
 }];
@@ -95,6 +96,43 @@ check(
   "a pattern with no source does not say 'noticed in null'",
   !/noticed in null|noticed in\s*\)/.test(renderPatterns([{ ...ONE[0], source: null }])),
   renderPatterns([{ ...ONE[0], source: null }]),
+);
+
+console.log("\n  Patterns only go where they belong");
+
+const MIXED = [
+  ONE[0],
+  {
+    id: 2, name: "Title and cover never repeat", source: "Myron Golden",
+    active: true, applies_to: "thumbnail",
+    what_it_does: "The words on the cover say something the title does not, so the viewer has to put the two together.",
+    example: null,
+  },
+];
+const forHooks = renderPatterns(MIXED, "hook");
+check(
+  "a thumbnail note is NOT handed to the spoken-hook writer",
+  !forHooks.includes("Title and cover never repeat"),
+  "the model tries to honour it, the hook comes out worse, and the page still looks like the feature is working",
+);
+check("...while the spoken-hook note still is", forHooks.includes("Away from pain"));
+const forThumbs = renderPatterns(MIXED, "thumbnail");
+check(
+  "asking for thumbnail patterns gets the thumbnail one",
+  forThumbs.includes("Title and cover never repeat"),
+);
+check(
+  "...and not the spoken-hook one",
+  !forThumbs.includes("Away from pain"),
+  forThumbs,
+);
+check(
+  "a kind with nothing stored returns nothing at all",
+  renderPatterns(MIXED, "caption") === "",
+);
+check(
+  "hook is the default, so existing callers keep working",
+  renderPatterns(MIXED) === forHooks,
 );
 
 console.log("\n  The wiring");
@@ -200,6 +238,40 @@ if (!existsSync(`${PG}/initdb`) || spawnSync("id", ["claude"]).status !== 0) {
       other !== "",
       "the index is per account, not global",
     );
+
+    // 0029
+    psql(readFileSync(join(ROOT, "migrations/0029_pattern_applies_to.sql"), "utf8"));
+    const backfilled = psql(`select distinct applies_to from hook_patterns`).trim();
+    check(
+      "everything already stored is treated as a spoken-hook pattern",
+      backfilled === "hook",
+      backfilled,
+    );
+
+    const sameName = psql(`insert into hook_patterns (account_id, name, what_it_does, applies_to)
+                           values (1, 'dupe', 'a', 'thumbnail') returning id`).trim();
+    check(
+      "the same name may be used for a different kind of pattern",
+      sameName !== "",
+      "'away from pain' is a real note for both a spoken hook and a thumbnail, and they are not the same note",
+    );
+
+    let stillBlocked = false;
+    try {
+      psql(`insert into hook_patterns (account_id, name, what_it_does, applies_to)
+            values (1, 'dupe', 'a', 'thumbnail')`);
+    } catch { stillBlocked = true; }
+    check("...but not twice for the same kind", stillBlocked);
+
+    let badKind = false;
+    try {
+      psql(`insert into hook_patterns (account_id, name, what_it_does, applies_to)
+            values (1, 'odd', 'a', 'billboard')`);
+    } catch { badKind = true; }
+    check("a kind nobody meant is refused", badKind);
+
+    psql(readFileSync(join(ROOT, "migrations/0029_pattern_applies_to.sql"), "utf8"));
+    check("0029 can be run twice", true);
   } finally {
     try { asClaude(`${PG}/pg_ctl -D ${base}/data stop -m immediate`); } catch {}
     try { rmSync(base, { recursive: true, force: true }); } catch {}
