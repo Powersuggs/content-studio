@@ -165,6 +165,43 @@ try {
   });
   check("an email that already has an account is refused", taken.location.includes("error="), taken.location);
 
+  console.log("\n  What the form tells people");
+
+  // Read off the rendered page, not the source file. The source
+  // explains in a comment WHY there is no "avoid special characters"
+  // rule, and checking the source made that explanation trip the check
+  // that exists to keep the rule out.
+  // React splits a line like "At least {N} characters" into separate
+  // nodes with comment markers between them, so those are stripped
+  // before matching. Otherwise the test fails on text that reads
+  // perfectly well on screen.
+  const form = (await (await fetch(`${BASE_URL}/signup`)).text())
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\s+/g, " ");
+  check(
+    "it never tells people to avoid certain characters",
+    !/no special characters|letters and numbers only|avoid symbols/i.test(form),
+    "every character is accepted here, so a rule like that would only make their passwords weaker for no reason",
+  );
+  check(
+    "it says every kind of character is fine",
+    /Any letters, numbers or symbols/.test(form),
+    form.includes("At least") ? "the hint is there but does not say this" : "no hint at all",
+  );
+  check(
+    "it gives the real minimum as a number",
+    /At least 10 characters/.test(form),
+  );
+  check(
+    "it pushes length, which is the thing that actually helps",
+    /A few words strung together/.test(form),
+  );
+  check(
+    "it says the code's dashes and capitals do not matter",
+    /Dashes and capitals do not matter/.test(form),
+    "the code is tidied before it is checked, and saying so saves people retyping one that would have worked",
+  );
+
   console.log("\n  Signing in afterwards");
 
   const signin = await post("/api/login", { email, password: "a decent password here" });
