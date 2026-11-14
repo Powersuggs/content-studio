@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   UserPlus,
+  CircleHelp,
   Newspaper,
   Scissors,
   BookOpen,
@@ -55,4 +56,5 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/history", label: "History", icon: History },
   { href: "/health", label: "Database check", icon: ShieldCheck },
   { href: "/settings", label: "Sources & Facts", icon: BookMarked },
+  { href: "/how-to", label: "How to use this", icon: CircleHelp },
 ];
