@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   UserPlus,
+  Scissors,
   BookOpen,
   AudioLines,
   LayoutDashboard,
@@ -34,6 +35,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/voice", label: "Your Voice", icon: Fingerprint },
   { href: "/talk", label: "Talk it out", icon: AudioLines },
   { href: "/books", label: "Books", icon: BookOpen },
+  { href: "/clips", label: "Clip finder", icon: Scissors },
   { href: "/ideas", label: "Ideas", icon: Lightbulb },
   { href: "/this-week", label: "This Week", icon: CalendarDays },
   { href: "/autopsy", label: "Autopsy", icon: Stethoscope },
