@@ -79,7 +79,15 @@ export async function POST(request: Request) {
           .filter(Boolean)
           .join("\n\n"),
         user: titlesUserPrompt({ premise, audience, currentTitle, material }),
-        maxTokens: 3000,
+        // 8000, not the 3000 this shipped with, which overflowed on the
+        // first real premise and returned "the model ran out of room".
+        // Six pairs is maybe 400 tokens of JSON. The budget is not for
+        // the JSON, it is for the thinking block the model spends before
+        // emitting it, and that scales with how much judgement the prompt
+        // asks for rather than with the size of the answer. This prompt
+        // asks for a lot of it: six distinct devices, two subtitle jobs,
+        // and a compliance rule to check each line against.
+        maxTokens: 8000,
         useVoice: true,
       }),
     );
