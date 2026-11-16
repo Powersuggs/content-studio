@@ -7,6 +7,7 @@ import {
   Trash2, Plus, Download, AlertCircle,
 } from "lucide-react";
 import MicButton from "@/components/voice/MicButton";
+import TitleSuggestions from "@/components/books/TitleSuggestions";
 import { countWords, type Book, type Chapter } from "@/lib/books/types";
 import {
   addChapterAction, deleteChapterAction, moveChapterAction,
@@ -35,6 +36,8 @@ export default function BookWorkspace({
   const [openId, setOpenId] = useState<number | null>(null);
   const [premise, setPremise] = useState(book.premise ?? "");
   const [audience, setAudience] = useState(book.audience ?? "");
+  const [title, setTitle] = useState(book.title);
+  const [subtitle, setSubtitle] = useState(book.subtitle ?? "");
   const [outlining, setOutlining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -71,10 +74,52 @@ export default function BookWorkspace({
 
   return (
     <div className="space-y-4">
+      {/*
+        The title and subtitle are editable in place rather than being a
+        heading with an edit button. A book gets renamed repeatedly while it
+        is being written, and a name that takes three clicks to change is a
+        name that stays wrong.
+      */}
       <div>
-        <h1 className="text-xl font-semibold text-text">{book.title}</h1>
-        {book.subtitle && <p className="text-sm text-muted">{book.subtitle}</p>}
-        <p className="mt-1 text-xs text-faint">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={() =>
+            start(async () => {
+              const next = title.trim();
+              // A book must have a title, so a cleared box is put back
+              // rather than saved as empty and refused by the database.
+              if (!next) {
+                setTitle(book.title);
+                return;
+              }
+              try {
+                await updateBookAction(book.id, { title: next });
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "That did not save.");
+              }
+            })
+          }
+          aria-label="Book title"
+          className="w-full rounded-lg border border-transparent bg-transparent px-2 py-1 text-xl font-semibold text-text outline-none hover:border-border focus:border-accent focus:bg-panel-2"
+        />
+        <input
+          value={subtitle}
+          onChange={(e) => setSubtitle(e.target.value)}
+          onBlur={() =>
+            start(async () => {
+              try {
+                await updateBookAction(book.id, { subtitle: subtitle.trim() || null });
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "That did not save.");
+              }
+            })
+          }
+          placeholder="Subtitle: the whole promise, in a line."
+          aria-label="Book subtitle"
+          className="w-full rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm text-muted outline-none hover:border-border focus:border-accent focus:bg-panel-2"
+        />
+        <p className="mt-1 px-2 text-xs text-faint">
           {chapters.length} chapters, {drafted} written, {words.toLocaleString()} words
         </p>
       </div>
@@ -119,6 +164,26 @@ export default function BookWorkspace({
             className="min-w-0 flex-1 resize-none rounded-lg border border-border bg-panel-2 px-3 py-2 text-sm text-text outline-none focus:border-accent"
           />
           <MicButton value={audience} onChange={setAudience} onError={setError} label="" size="sm" />
+        </div>
+
+        <div className="border-t border-border pt-3">
+          <TitleSuggestions
+            bookId={book.id}
+            premise={premise}
+            audience={audience}
+            currentTitle={title}
+            onPick={({ title: t, subtitle: sub }) => {
+              setTitle(t);
+              setSubtitle(sub);
+              start(async () => {
+                try {
+                  await updateBookAction(book.id, { title: t, subtitle: sub });
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "That did not save.");
+                }
+              });
+            }}
+          />
         </div>
       </div>
 

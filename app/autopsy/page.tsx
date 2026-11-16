@@ -1,4 +1,6 @@
 import Link from "next/link";
+import SetupNotice from "@/components/SetupNotice";
+import { safeLoad } from "@/lib/db-errors";
 import { getPostsBelowMedianViews, getPillarPerformance } from "@/lib/queries";
 
 function formatViews(n: number): string {
@@ -12,10 +14,21 @@ function formatAvg(n: number): string {
 }
 
 export default async function AutopsyPage() {
-  const [posts, pillarPerformance] = await Promise.all([
-    getPostsBelowMedianViews(),
-    getPillarPerformance(),
-  ]);
+  // Both of these need an Instagram handle, which a brand new account
+  // does not have. Without this the page threw and the person got
+  // "Application error: a server-side exception has occurred", which
+  // tells them nothing and looks like the app is broken rather than
+  // like there is one thing left to set up.
+  const [posts, postsError] = await safeLoad(
+    () => getPostsBelowMedianViews(),
+    [] as Awaited<ReturnType<typeof getPostsBelowMedianViews>>,
+    "posts",
+  );
+  const [pillarPerformance] = await safeLoad(
+    () => getPillarPerformance(),
+    [] as Awaited<ReturnType<typeof getPillarPerformance>>,
+    "posts",
+  );
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-8">
@@ -25,6 +38,8 @@ export default async function AutopsyPage() {
           Every post below your median views, worst performer first.
         </p>
       </div>
+
+      {postsError && <SetupNotice message={postsError} />}
 
       {pillarPerformance.length > 0 && (
         <section>

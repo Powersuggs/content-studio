@@ -272,6 +272,46 @@ if (!existsSync(`${PG}/initdb`) || spawnSync("id", ["claude"]).status !== 0) {
 
     psql(readFileSync(join(ROOT, "migrations/0029_pattern_applies_to.sql"), "utf8"));
     check("0029 can be run twice", true);
+
+    // 0031: book titles become a kind of pattern in their own right.
+    //
+    // The risk worth a test is specific. 0029 created this constraint, so
+    // adding the new one with an "if not exists" guard would have found it
+    // already there and done nothing, leaving book_title refused by the
+    // database while the migration file looked like it had run. So: prove
+    // it is refused BEFORE, accepted AFTER, and that a nonsense value is
+    // still refused rather than the constraint having been dropped and
+    // left off.
+    let beforeRefused = false;
+    try {
+      psql(`insert into hook_patterns (account_id, name, what_it_does, applies_to)
+            values (1, 'bt-before', 'a', 'book_title')`);
+    } catch { beforeRefused = true; }
+    check(
+      "a book title pattern is refused before 0031",
+      beforeRefused,
+      "if this fails the constraint was never there and 0031 proves nothing",
+    );
+
+    psql(readFileSync(join(ROOT, "migrations/0031_book_title_patterns.sql"), "utf8"));
+
+    const afterId = psql(`insert into hook_patterns (account_id, name, what_it_does, applies_to)
+                          values (1, 'bt-after', 'a', 'book_title') returning id`).trim();
+    check("...and accepted after it", afterId !== "", afterId);
+
+    let stillRefusesJunk = false;
+    try {
+      psql(`insert into hook_patterns (account_id, name, what_it_does, applies_to)
+            values (1, 'bt-junk', 'a', 'billboard')`);
+    } catch { stillRefusesJunk = true; }
+    check(
+      "0031 widened the constraint without removing it",
+      stillRefusesJunk,
+      "a dropped constraint would accept anything, which is the easy way to get this wrong",
+    );
+
+    psql(readFileSync(join(ROOT, "migrations/0031_book_title_patterns.sql"), "utf8"));
+    check("0031 can be run twice", true);
   } finally {
     try { asClaude(`${PG}/pg_ctl -D ${base}/data stop -m immediate`); } catch {}
     try { rmSync(base, { recursive: true, force: true }); } catch {}

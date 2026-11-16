@@ -17,10 +17,18 @@ export default function SetupNotice({ message }: { message: string }) {
       />
       <div className="min-w-0">
         <p className="text-sm text-warn">{message}</p>
-        <p className="mt-1 text-xs text-muted">
-          Run it in your database&rsquo;s SQL editor. Migrations are safe to
-          run twice.
-        </p>
+        {/*
+          Only when the message actually names a file to run. This line
+          used to show on every notice, including "set your Instagram
+          handle", where it told someone to go and run SQL that does not
+          exist and has nothing to do with their problem.
+        */}
+        {/\.sql\b/.test(message) && (
+          <p className="mt-1 text-xs text-muted">
+            Run it in your database&rsquo;s SQL editor. Migrations are safe to
+            run twice.
+          </p>
+        )}
       </div>
     </div>
   );

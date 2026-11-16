@@ -1,4 +1,6 @@
 import { getBoardTogglePosts, getBoardsList } from "@/lib/queries";
+import { safeLoad } from "@/lib/db-errors";
+import SetupNotice from "@/components/SetupNotice";
 import BoardPostPicker from "@/components/boards/BoardPostPicker";
 
 export default async function BoardDetailPage({
@@ -8,10 +10,23 @@ export default async function BoardDetailPage({
 }) {
   const { id } = await params;
   const boardId = Number(id);
-  const [posts, boards] = await Promise.all([
-    getBoardTogglePosts(boardId),
-    getBoardsList(),
-  ]);
+  const [loaded, setupError] = await safeLoad(
+    async () =>
+      Promise.all([getBoardTogglePosts(boardId), getBoardsList()]),
+    null as [
+      Awaited<ReturnType<typeof getBoardTogglePosts>>,
+      Awaited<ReturnType<typeof getBoardsList>>,
+    ] | null,
+    "board detail",
+  );
+  if (setupError || !loaded) {
+    return (
+      <div className="mx-auto max-w-2xl p-4 md:p-8">
+        <SetupNotice message={setupError ?? "This board could not be loaded."} />
+      </div>
+    );
+  }
+  const [posts, boards] = loaded;
   const board = boards.find((b) => b.id === boardId);
 
   return (
