@@ -68,7 +68,18 @@ create policy account_isolation on voice_profile
   using (account_id = app_current_account())
   with check (account_id = app_current_account());
 
-grant select, insert, update, delete on voice_answers, voice_profile to app_user;
-grant usage, select on sequence voice_answers_id_seq to app_user;
+-- Guarded like every other migration's grants. Unguarded, this whole
+-- file fails on an install where the restricted role has not been
+-- created yet, which makes a fresh deployment impossible to run in
+-- order. 0030 re-grants everything afterwards, so an install that
+-- skips this block still ends up correct.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'app_user') then
+    grant select, insert, update, delete on voice_answers, voice_profile to app_user;
+    grant usage, select on sequence voice_answers_id_seq to app_user;
+  end if;
+end
+$$;
 
 commit;

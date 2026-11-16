@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ExternalLink, PenLine } from "lucide-react";
 import { getMyPostById, getMyMedianRates, getDistinctPillars } from "@/lib/queries";
+import { safeLoad } from "@/lib/db-errors";
+import SetupNotice from "@/components/SetupNotice";
 import PostAnalyticsPanel from "@/components/posts/PostAnalyticsPanel";
 import ReviewButton from "@/components/posts/ReviewButton";
 import PillarTag from "@/components/posts/PillarTag";
@@ -18,7 +20,19 @@ export default async function PostDetailPage({
 }) {
   const { id } = await params;
   const postId = Number(id);
-  const post = await getMyPostById(postId);
+  const [post, setupError] = await safeLoad(
+    () => getMyPostById(postId),
+    null as Awaited<ReturnType<typeof getMyPostById>>,
+    "post detail",
+  );
+
+  if (setupError) {
+    return (
+      <div className="mx-auto max-w-2xl p-4 md:p-8">
+        <SetupNotice message={setupError} />
+      </div>
+    );
+  }
 
   if (!post) {
     return (
@@ -28,8 +42,16 @@ export default async function PostDetailPage({
     );
   }
 
-  const medians = await getMyMedianRates();
-  const pillarSuggestions = await getDistinctPillars();
+  const [medians] = await safeLoad(
+    () => getMyMedianRates(),
+    {} as Awaited<ReturnType<typeof getMyMedianRates>>,
+    "post detail",
+  );
+  const [pillarSuggestions] = await safeLoad(
+    () => getDistinctPillars(),
+    [] as Awaited<ReturnType<typeof getDistinctPillars>>,
+    "post detail",
+  );
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">

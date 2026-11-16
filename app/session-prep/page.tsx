@@ -1,4 +1,6 @@
 import Link from "next/link";
+import SetupNotice from "@/components/SetupNotice";
+import { safeLoad } from "@/lib/db-errors";
 import { PenLine, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { getPostingCadence, getTopPostsForRemake } from "@/lib/queries";
 
@@ -18,10 +20,18 @@ function ChangeBadge({ pct }: { pct: number | null }) {
 }
 
 export default async function SessionPrepPage() {
-  const [cadence, topPosts] = await Promise.all([
-    getPostingCadence(),
-    getTopPostsForRemake(),
-  ]);
+  // Same as Autopsy: both need an Instagram handle, and a new account
+  // has none. Unwrapped, this page crashed rather than saying so.
+  const [cadence, cadenceError] = await safeLoad(
+    () => getPostingCadence(),
+    null as Awaited<ReturnType<typeof getPostingCadence>> | null,
+    "posts",
+  );
+  const [topPosts] = await safeLoad(
+    () => getTopPostsForRemake(),
+    [] as Awaited<ReturnType<typeof getTopPostsForRemake>>,
+    "posts",
+  );
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 p-4 md:p-8">
@@ -30,6 +40,9 @@ export default async function SessionPrepPage() {
         <p className="mt-1 text-sm text-muted">Where you stand before you sit down to film.</p>
       </div>
 
+      {cadenceError && <SetupNotice message={cadenceError} />}
+
+      {cadence && (
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-lg border border-border bg-panel p-4">
           <p className="text-xs text-faint">Posts (30d)</p>
@@ -48,6 +61,7 @@ export default async function SessionPrepPage() {
           <div className="mt-2"><ChangeBadge pct={cadence.pct_change_posts} /></div>
         </div>
       </section>
+      )}
 
       <section>
         <h2 className="mb-3 text-sm font-semibold text-text">Remake candidates</h2>

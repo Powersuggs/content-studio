@@ -7,8 +7,15 @@
  * that only wants to check what reaches the model should not have to
  * drag a request context in to do it.
  */
-/** Where a pattern applies. Spoken hooks are what Hook Lab writes. */
-export const APPLIES_TO = ["hook", "title", "thumbnail", "caption"] as const;
+/**
+ * Where a pattern applies. Spoken hooks are what Hook Lab writes.
+ *
+ * book_title is deliberately separate from title. A video title competes
+ * in a feed and is read in half a second; a book title has to survive
+ * being said out loud by someone recommending the book to someone else.
+ * Advice about one is not advice about the other.
+ */
+export const APPLIES_TO = ["hook", "title", "thumbnail", "caption", "book_title"] as const;
 export type AppliesTo = (typeof APPLIES_TO)[number];
 
 export const APPLIES_LABEL: Record<AppliesTo, string> = {
@@ -16,6 +23,7 @@ export const APPLIES_LABEL: Record<AppliesTo, string> = {
   title: "Title",
   thumbnail: "Thumbnail text",
   caption: "Caption",
+  book_title: "Book title",
 };
 
 export interface HookPattern {
